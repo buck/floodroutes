@@ -1,0 +1,22 @@
+# houston311 PostGIS for floodroutes. Port per ~/claude/system-summary.md convention.
+services:
+  db:
+    image: postgis/postgis:18-3.6
+    container_name: floodroutes-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: houston311
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    command: >
+      postgres -c shared_buffers=2GB -c work_mem=128MB -c maintenance_work_mem=1GB
+               -c max_wal_size=8GB -c checkpoint_timeout=15min
+    ports:
+      - "127.0.0.1:5442:5432"
+    volumes:
+      - /new/floodroutes/pgdata:/var/lib/postgresql
+    shm_size: 1g
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d houston311"]
+      interval: 10s
+      retries: 10
