@@ -7,3 +7,4 @@ graphhopper/graph-cache/
 graphhopper/*.jar
 graphhopper/*.osm.pbf
 .env
+docs/classification_sample*.csv

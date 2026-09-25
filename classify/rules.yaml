@@ -1,0 +1,150 @@
+# Phase 2 classification rules. Edit and rerun classify/classify.py; it rebuilds
+# core.flood_signal from scratch and records this file's SHA-256 on every row.
+#
+# Tier logic (first match wins, then the storm-day upgrade):
+#   1. case type in types.strong                           -> strong
+#   2. case type in types.moderate + a strong keyword      -> strong
+#   3. case type in types.moderate                         -> moderate
+#   4. case type in types.keyword_only + strong keyword    -> keyword_only_strong_tier
+#   5. case type in types.keyword_only + weak keyword      -> weak
+#   6. any other non-excluded type + strong keyword        -> other_type_strong_tier
+#      (null disables rule 6; the first sample review found it ~10% precise)
+#   Excluded types never produce a signal, whatever their text says.
+#   Void patterns drop the record entirely (entered in error).
+#   Demote patterns (maintenance-only text) lower the base tier one step unless
+#   a strong keyword also matched; weak drops out.
+#   Storm-day upgrade: created on a storm day or the day after -> one tier up.
+
+# Only complaint text is searched. Title is always "<type>" or
+# "<type> - <case#> - <address>", so it carries no complaint text.
+text_fields: [description, latest_notes, conflict_notes, resolution_notes]
+
+types:
+  strong:
+    - Flooding
+    - Low Area or Standing Water ROW          # 2011-2014 schema
+  moderate:
+    - Drainage
+    - Inlet Clogged Needs Cleaning ROW
+    - Street Drainage Restoration
+    - Clean Storm Sewer
+    - Storm Sewer Repair
+    - Storm Sewer Inspection
+    - Roadside Ditch Maintenance
+    - Regrade Roadside Ditch
+    - Clean Off Road Ditch
+    - Flush Roadside Ditch or Culvert
+    - Regrade Off Road Ditch
+    - Install Culvert
+  keyword_only:        # street-related types where text decides
+    - Street Hazard
+    - Street Condition
+    - Pothole
+    - Drainage System Violation
+    - Nuisance On Property
+    - HPW Escalation
+    - City Engineer
+    - PW CIP Project
+    - Traffic Signs
+    - Traffic Signal Maintenance
+  excluded:            # brief's exclusions plus recon findings
+    - Water Leak
+    - Major Water Leak
+    - Minor Water Leak
+    - Water Service
+    - Water Meter
+    - Water Main Valve
+    - Water Quality
+    - Sewer Wastewater
+    - Sewer Wastewater Repair
+    - Sewer Manhole
+    - Sewer In Residence or Business
+    - High Profile Sewer In Residence or Business
+    - Sewer Excursion
+    - High Profile Sewer Excursion
+    - Sewer Blockage
+    - High Profile Sewer Blockage
+    - Weeds/Trash/Stagnant Water on Property
+    - Floodplain                              # permitting inquiry
+    - Water/Sewer/Drainage Billing
+    - Storm Debris Collection
+    - Severe Storm Tree Removal
+    - Storm Damage                            # Harvey evacuation requests
+    - Poor Drainage                           # Parks facilities, not streets
+    - Graffiti - Harris County Flood Control Property
+    - Fire Hydrant
+    - Fire Hydrant Urgent
+    - Meter Investigation
+    - Building Code Violation                 # mostly flooded homes/units
+    - MultiFamily Habitability Violation
+    - Health Code
+
+keyword_only_strong_tier: moderate
+other_type_strong_tier: null
+
+# Python regexes, case-insensitive.
+keywords:
+  strong:
+    - '\bflood(ed|ing|s)?\b'
+    - '\bhigh water\b'
+    - '\bwater (is |was )?(in|over|across|covering) (the )?(street|road|roadway|intersection|lanes?)\b'
+    - '\b(street|road|roadway|intersection)s? (is |are |was |were )?(under ?water|submerged)\b'
+    - '\bunderpass\b'
+    - '\bimpassable\b'
+    - '\b(cars?|vehicles?) (were |are |got |get )?(stalled|stranded|stuck in (the )?water)\b'
+    - "\\b(won'?t|will not|doesn'?t|does not|not|never) drain\\w*\\b.{0,60}\\b(street|road)s?\\b"
+    - "\\b(street|road)s?\\b.{0,60}\\b(won'?t|will not|doesn'?t|does not|not|never) drain"
+  weak:
+    - '\bstanding water\b'
+    - '\bponding\b'
+    - '\b(clogged|blocked|stopped up) (storm )?(inlet|drain|sewer)s?\b'
+    # ditch/culvert/drain words only count with a water/blockage context nearby
+    - '\b(ditch|culvert|storm ?drain|storm ?sewer|inlet)\w*\b.{0,60}\b(water|flood\w*|not draining|won.?t drain|overflow\w*|back(ed|ing)? up)\b'
+    - '\b(water|flood\w*|overflow\w*)\b.{0,60}\b(ditch|culvert|storm ?drain|storm ?sewer|inlet)'
+  # Drop the record entirely.
+  void:
+    - '\b(please )?disregard\b'
+    - '\b(wrong|incorrect) (sr|case|service request)\b'
+    - '\b(entered|created|opened) (in )?error\b'
+  # Maintenance-only or non-flood text: base tier down one step unless a strong keyword matched.
+  demote:
+    - '\b(high )?(weeds|grass)\b'
+    - '\bmow(ed|ing)?\b'
+    - '\b(trash|dumping|dumped|junk|tires?|debris at curb)\b'
+    - '\b(dropped|fell|fallen) (\w+ ){0,3}(in|into)\b'
+    - '\b(phone|keys|wallet)\b'
+    - '\b(missing|broken|cracked) (\w+ )?(cover|grate|lid|casting)s?\b'
+    - '\b(cover|grate|lid)s? (is |are )?(missing|broken|off)\b'
+    - '\bwater main\b|\bmain break\b|\bbroken (water )?(main|pipe)\b'
+  # A match here cancels keyword matches in the same record (not type matches).
+  negative:
+    - '\bflood ?lights?\b'
+    - '\bflood(ed|ing)? (from|due to|because of|by) (a |the )?(water )?(leak|main|meter|hydrant|sprinkler|pipe|line)'
+    - '\bflood (zone|plain|insurance|certificate|elevation)\b'
+
+storm_days:
+  # Daily count of requests whose case type is in types.strong or types.moderate.
+  percentile: 99          # of daily counts over first_day..today
+  min_count: 100          # and never below this
+  first_day: '2012-01-01' # 2011 has almost no locations
+  # Consecutive storm days (gap <= max_gap_days) form one event.
+  max_gap_days: 1
+  # Force-merge windows into one event (late reports after major storms).
+  merge_windows:
+    - {label: 'Harvey (incl. late reports)', start: '2017-08-25', end: '2017-09-30'}
+  # Labels for reporting only.
+  known_events:
+    - {label: 'Memorial Day flood', start: '2015-05-25', end: '2015-05-28'}
+    - {label: 'Halloween flood', start: '2015-10-30', end: '2015-11-01'}
+    - {label: 'Tax Day flood', start: '2016-04-17', end: '2016-04-20'}
+    - {label: 'Jan 2017 storm', start: '2017-01-18', end: '2017-01-19'}
+    - {label: 'Harvey', start: '2017-08-25', end: '2017-09-30'}
+    - {label: 'Imelda', start: '2019-09-18', end: '2019-09-21'}
+    - {label: 'May 2021 storm', start: '2021-05-23', end: '2021-05-25'}
+    - {label: 'Beryl', start: '2024-07-07', end: '2024-07-10'}
+    - {label: 'June 2026 storms', start: '2026-06-01', end: '2026-06-30'}
+
+sample:
+  per_tier: 100
+  seed: 311
+  max_chars: 500
