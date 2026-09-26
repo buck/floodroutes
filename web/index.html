@@ -160,10 +160,14 @@ L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
 }).addTo(map);
 
 // ---- layout: trip box inside the panel on desktop, as a top card on phones
+// Move the card only when the layout really changes. The on-screen keyboard resizes the
+// window on phones; re-parenting a focused input would blur it and close the keyboard.
 function placeTrip() {
   const card = $('tripCard');
-  if (mobile()) { card.classList.add('card'); document.body.appendChild(card); }
-  else { card.classList.remove('card'); $('tripSlot').appendChild(card); }
+  const target = mobile() ? document.body : $('tripSlot');
+  if (card.parentNode === target || card.contains(document.activeElement)) return;
+  card.classList.toggle('card', mobile());
+  target.appendChild(card);
 }
 placeTrip();
 addEventListener('resize', () => { placeTrip(); map.invalidateSize(); });
