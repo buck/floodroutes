@@ -746,8 +746,8 @@ async function onPosition(p) {
   if (nextMajor) voiceForArea(nextMajor, nextMajor.along_m - prd.along);
   $('driveNext').innerHTML = ahead
     ? (ahead.along_m <= prd.along
-        ? `<span class="tier ${ahead.tier}">${ahead.tier}</span> In a flood-history area now (${ahead.storm_events} storm${ahead.storm_events === 1 ? '' : 's'})`
-        : `<span class="tier ${ahead.tier}">${ahead.tier}</span> Flood-history area in ${km(ahead.along_m - prd.along)} (${ahead.storm_events} storm${ahead.storm_events === 1 ? '' : 's'})`)
+        ? `<span class="tier ${ahead.tier}">${ahead.tier}</span> In a flood-history area now ${ahead.storm_events ? `(${ahead.storm_events} storm${ahead.storm_events === 1 ? '' : 's'})` : ''}`
+        : `<span class="tier ${ahead.tier}">${ahead.tier}</span> Flood-history area in ${km(ahead.along_m - prd.along)} ${ahead.storm_events ? `(${ahead.storm_events} storm${ahead.storm_events === 1 ? '' : 's'})` : ''}`)
     : 'No flood-history areas left on this route.';
   if (liveAhead && liveAhead.pr.along - prd.along <= 2000) {
     const st = liveAhead.sp.state, d = Math.max(0, liveAhead.pr.along - prd.along);

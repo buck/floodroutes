@@ -15,3 +15,4 @@ notes.*
 .*.swp
 graphhopper/plugin/classes/
 graphhopper/plugin/*.jar
+demo/out/
