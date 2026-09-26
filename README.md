@@ -154,4 +154,9 @@ As of 2026-09-25; see the docs for detail.
   - On quad, *new* localhost TCP connections sometimes take ~200 ms to connect (seen for both GraphHopper and the API; OpenSnitch's connection interception is the suspect, unconfirmed). Browsers reuse connections, so map users don't see it.
 - **Live exclusions** (`POST /route` `areas`) still use query-time areas. That's fine for a handful of polygons; hundreds would bring the old slowness back.
 - **Moderate tier precision (~50%):** it is dominated by the `Drainage` type, much of which is ditch maintenance. The event-recurrence factor limits the damage, since dry-day maintenance calls don't recur across storms.
+- **To do if the city continues the project:**
+  - Weekly graph rebuild on a timer. The nightly refresh already reclassifies and geocodes; history changes slowly.
+  - Low-downtime rebuild: import the new graph while the old one keeps serving, then restart (~10 s gap instead of ~90 s).
+  - Live gauge feed: HCFCD gauges plus a table of road segments by flood stage (e.g. North/South Braeswood when Brays Bayou leaves its banks), sent as live `areas`. Bayou-side roads have few front doors, so 311 under-reports them.
+  - TranStar roadway flood warning sensors (underpasses) as live `areas`.
 - **Out of scope (hooks left):** live TranStar high water, NWS storm reports, HCFCD gauges and rainfall, USGS high-water marks (`POST /route` `areas`); OsmAnd/GPX export; public deployment.
