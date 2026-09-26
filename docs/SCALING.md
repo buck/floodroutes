@@ -46,7 +46,7 @@ Every server must see the same reports. Options, simplest first:
 Either way the report rules (`api/live_config.yaml`) stay identical.
 
 ### 3.2 Map tiles: the real bottleneck at scale
-Build our own **vector tiles** from the Houston OSM extract (Planetiler → one PMTiles file, ~100–300 MB). Host it as a **static file on S3 behind CloudFront** and render it in the browser with MapLibre GL. Then:
+Build our own **vector tiles** from the Houston OSM extract (Planetiler → one PMTiles file, **74 MB measured**; see below). Host it as a **static file on S3 behind CloudFront** and render it in the browser with MapLibre GL. Then:
 - it costs next to nothing at any load, since it's static and on a CDN;
 - OSM's volunteer servers are never involved;
 - it enables the heading-up driver view (MapLibre rotates natively), already on the to-do list.
@@ -67,11 +67,16 @@ Self-hosting OSM tiles used to mean hundreds of gigabytes and a rendering server
 
 "Our own tiles" means **pre-built once** from the OSM extract (Planetiler, minutes for Houston); what happens "on the fly" is the drawing, in each visitor's browser.
 
-Rough sizes (typical published results, **not yet measured here**; building the Houston file on quad would take ~15 min and settle it):
+**Measured for Houston (2026-09-26, quad):** Planetiler v0.10.2, OpenMapTiles profile, from `data/osm/houston.osm.pbf` (113 MB):
+- output `data/tiles/houston.pmtiles`: **74 MB**, zooms 0–14, 18,944 tiles (8,140 unique; identical tiles such as open water are stored once);
+- build time 2 min 48 s, of which ~75 s was the one-time download of coastline and water data (1.4 GB, kept in `data/tiles/data/sources/` for next time); peak memory ~4 GB;
+- the same area as raster tiles to zoom 18: **1,470,905 tiles**, 99.6% of them in zooms 15–18, so ~22–37 GB at typical 15–25 KB per tile.
+
+Other areas (typical published results, not measured here):
 
 | Area | Raster, all zooms | Vector (PMTiles) |
 |---|---|---|
-| Greater Houston (our map) | tens of GB | ~100–300 MB |
+| Greater Houston (our map) | ~22–37 GB (1.47 M tiles, counted) | **74 MB (measured)** |
 | Texas | hundreds of GB | ~1–2 GB |
 | United States | several TB | ~10–20 GB |
 | Planet | petabytes if fully pre-rendered | ~100 GB |
@@ -118,7 +123,7 @@ Watches typically come hours ahead, far more than the ~1 minute a server needs. 
 - **quad (home server)** runs the data pipeline. It may lose power or internet in a real storm, as in Harvey, and that's acceptable: history doesn't change mid-event, and the public site doesn't depend on quad.
 - **Live reports must not live at home.** gitano (a datacenter VPS) is fine; a managed database is better.
 - **gitano** is a single point of failure for the default site. With the cloud setup, CloudFront + ALB is the event-time front door, and gitano becomes one member (or just the report authority).
-- **Map tiles are an outside dependency today.** During an event, OSM's volunteer tile servers could throttle us under heavy use, or be slow. Self-hosted vector tiles (§3.2) remove that: the PMTiles file lives on S3/CloudFront, with a copy on gitano as a fallback. It's small enough (~100–300 MB for Houston) to keep several copies. The same file could later let phones cache the Houston map for offline use when cell service degrades.
+- **Map tiles are an outside dependency today.** During an event, OSM's volunteer tile servers could throttle us under heavy use, or be slow. Self-hosted vector tiles (§3.2) remove that: the PMTiles file lives on S3/CloudFront, with a copy on gitano as a fallback. It's small enough (74 MB for Houston) to keep several copies. The same file could later let phones cache the Houston map for offline use when cell service degrades.
 - **Rehearse once before hurricane season:** scale to 2, flip DNS, run `validate/validate.py` and a 5-minute load test, flip back.
 
 ## 7. Suggested order of work
