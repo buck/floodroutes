@@ -51,6 +51,41 @@ Build our own **vector tiles** from the Houston OSM extract (Planetiler → one 
 - OSM's volunteer servers are never involved;
 - it enables the heading-up driver view (MapLibre rotates natively), already on the to-do list.
 
+#### Why self-hosted tiles are now cheap: raster vs vector
+
+Self-hosting OSM tiles used to mean hundreds of gigabytes and a rendering server. That is still true for **raster** tiles; it is not true for **vector** tiles.
+
+**Raster tiles** are finished 256×256 pictures (PNG), drawn in advance by a tile server:
+- every zoom level has 4× the tiles of the one before, so street-level zooms (17–18) are the vast majority;
+- each tile is an image, typically 10–50 KB, even when mostly empty;
+- rendering them needs a PostGIS database of the map data plus a rendering stack. For the US that is hundreds of GB of database, and more for the pre-rendered tiles.
+
+**Vector tiles** hold the map *data* (road lines as coordinates, names, types), and the browser draws the picture (MapLibre GL, on the device's graphics chip):
+- coordinates compress far better than pixels;
+- tiles are built only up to zoom ~14. Closer zooms magnify the zoom-14 data, which stays sharp because lines scale without loss, so zooms 15–18, the bulk of any raster set, don't exist at all;
+- all tiles go in one PMTiles file. The browser fetches only the byte ranges it needs from any plain web server or S3, so there's no tile server.
+
+"Our own tiles" means **pre-built once** from the OSM extract (Planetiler, minutes for Houston); what happens "on the fly" is the drawing, in each visitor's browser.
+
+Rough sizes (typical published results, **not yet measured here**; building the Houston file on quad would take ~15 min and settle it):
+
+| Area | Raster, all zooms | Vector (PMTiles) |
+|---|---|---|
+| Greater Houston (our map) | tens of GB | ~100–300 MB |
+| Texas | hundreds of GB | ~1–2 GB |
+| United States | several TB | ~10–20 GB |
+| Planet | petabytes if fully pre-rendered | ~100 GB |
+
+**What changed since ~2018.** The OSM *data* has always been free (it's what the router already uses). Vector tiles themselves were not new either: Google Maps moved to vector rendering around 2013, the Mapbox vector-tile format dates from ~2014, and OSM-based OpenMapTiles from ~2016. But self-hosting them still needed a PostGIS import, a multi-step build (days for large areas) and a tile server. What changed is free tooling:
+- **MapLibre GL** (2020): an open-source browser renderer, forked by the community when Mapbox's renderer went proprietary.
+- **Planetiler** (~2022): builds vector tiles straight from an OSM extract on one machine, no database. Minutes for a city, hours for the planet.
+- **PMTiles** (Protomaps, ~2022): the whole tile set in one file served by plain HTTP range requests, no tile server.
+- **Phones:** nearly all now have graphics hardware that draws vector maps smoothly.
+
+openstreetmap.org's own main map has long been served as raster tiles. The OSM Foundation has been working toward official vector tiles, but this plan doesn't depend on that: we build from the same OSM extract the router uses.
+
+Caveats: the browser does more drawing work (fine on any recent phone; it's how Google and Apple Maps work). We choose the map style ourselves; free starting points exist (Protomaps, OpenMapTiles styles). The first Planetiler run downloads ~1 GB of coastline and water data.
+
 ### 3.3 Load balancer, TLS, rate limits
 - **Front door:** CloudFront (static page, tiles, layers) plus an Application Load Balancer for `/route`, `/geocode`, `/reverse` and `/reports`. Or a single ALB if tiles are elsewhere.
 - **DNS during events:** `floodroutes CNAME` points at CloudFront/ALB. Short TTL (e.g. 60 s) on that record so the switch is quick.
@@ -83,6 +118,7 @@ Watches typically come hours ahead, far more than the ~1 minute a server needs. 
 - **quad (home server)** runs the data pipeline. It may lose power or internet in a real storm, as in Harvey, and that's acceptable: history doesn't change mid-event, and the public site doesn't depend on quad.
 - **Live reports must not live at home.** gitano (a datacenter VPS) is fine; a managed database is better.
 - **gitano** is a single point of failure for the default site. With the cloud setup, CloudFront + ALB is the event-time front door, and gitano becomes one member (or just the report authority).
+- **Map tiles are an outside dependency today.** During an event, OSM's volunteer tile servers could throttle us under heavy use, or be slow. Self-hosted vector tiles (§3.2) remove that: the PMTiles file lives on S3/CloudFront, with a copy on gitano as a fallback. It's small enough (~100–300 MB for Houston) to keep several copies. The same file could later let phones cache the Houston map for offline use when cell service degrades.
 - **Rehearse once before hurricane season:** scale to 2, flip DNS, run `validate/validate.py` and a 5-minute load test, flip back.
 
 ## 7. Suggested order of work
