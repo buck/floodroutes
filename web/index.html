@@ -51,7 +51,8 @@
     <button id="reset" style="float:right">Reset</button>
     <label><input type="checkbox" id="riskToggle" checked> Risk areas (routing tiers)</label><br>
     <label><input type="checkbox" id="surfaceToggle"> Risk surface (smoothed)</label><br>
-    <label><input type="checkbox" id="bayouToggle" checked> Bayous</label>
+    <label><input type="checkbox" id="bayouToggle" checked> Bayous</label><br>
+    <label><input type="checkbox" id="hfdToggle" checked> Firefighter reports (2018 HFD survey)</label>
   </div>
   <div class="muted" style="font-size:12px">
     <span class="tier high">high</span> <span class="tier medium">medium</span> <span class="tier low">low</span>
@@ -77,7 +78,8 @@ fetch('risk.geojson').then(r => r.json()).then(fc => {
     style: f => ({ color: css('--' + f.properties.tier), weight: 1, fillOpacity: 0.35 }),
     onEachFeature: (f, l) => l.bindTooltip(
       `${f.properties.tier} risk · ${f.properties.storm_events} storm events · ` +
-      `${f.properties.cases} reports (${(f.properties.first_day || '').slice(0, 4)}–${(f.properties.last_day || '').slice(0, 4)})`)
+      `${f.properties.cases} reports (${(f.properties.first_day || '').slice(0, 4)}–${(f.properties.last_day || '').slice(0, 4)})` +
+      (f.properties.firefighter_reports ? ' · includes firefighter reports' : ''))
   }).addTo(map);
 });
 document.getElementById('riskToggle').onchange = e => {
@@ -110,6 +112,26 @@ fetch('bayous.geojson').then(r => r.ok ? r.json() : null).then(fc => {
     onEachFeature: (f, l) => l.bindTooltip(f.properties.name, { sticky: true }) });
   if (document.getElementById('bayouToggle').checked) bayouLayer.addTo(map);
 });
+// Firefighter-reported flooding (Perry & Stein, Rice/Kinder 2019, Appendix A)
+let hfdLayer = null;
+const sevColor = { cut_off: '#7e22ce', recurring: '#a855f7', major_event: '#c4b5fd' };
+const sevText = { cut_off: 'units can\'t leave the station', recurring: 'floods in most heavy rains', major_event: 'flooded in the named storms' };
+fetch('hfd.geojson').then(r => r.ok ? r.json() : null).then(fc => {
+  if (!fc) { document.getElementById('hfdToggle').disabled = true; return; }
+  const tip = f => `<b>Station ${f.properties.station ?? '?'}</b> · ${sevText[f.properties.severity]}<br>` +
+    `<i>“${esc(f.properties.quote)}”</i><br><span class="muted">HFD officer survey, 2018 (Rice/Kinder report, 2019)</span>`;
+  hfdLayer = L.geoJSON(fc, {
+    style: f => ({ color: sevColor[f.properties.severity], weight: 5, opacity: 0.85, dashArray: '6 4' }),
+    pointToLayer: (f, ll) => L.circleMarker(ll, { radius: 8, color: sevColor[f.properties.severity], weight: 3, fillOpacity: 0.3 }),
+    onEachFeature: (f, l) => l.bindTooltip(tip(f), { sticky: true, maxWidth: 320 })
+  });
+  if (document.getElementById('hfdToggle').checked) hfdLayer.addTo(map);
+});
+document.getElementById('hfdToggle').onchange = e => {
+  if (!hfdLayer) return;
+  e.target.checked ? hfdLayer.addTo(map) : map.removeLayer(hfdLayer);
+};
+
 document.getElementById('bayouToggle').onchange = e => {
   if (!bayouLayer) return;
   e.target.checked ? bayouLayer.addTo(map) : map.removeLayer(bayouLayer);

@@ -72,9 +72,9 @@ def main():
             r = conn.execute("""
                 WITH p AS (SELECT ST_SetSRID(ST_MakePoint(%s, %s), 4326)::geography g)
                 SELECT
-                  coalesce(sum(h.score) FILTER (WHERE ST_DWithin(h.geom::geography, p.g, 300)), 0),
-                  coalesce(sum(h.score) FILTER (WHERE ST_DWithin(h.geom::geography, p.g, 1000)), 0),
-                  coalesce(max(h.score) FILTER (WHERE ST_DWithin(h.geom::geography, p.g, 300)), 0),
+                  coalesce(sum(coalesce(h.score_311, h.score)) FILTER (WHERE ST_DWithin(h.geom::geography, p.g, 300)), 0),
+                  coalesce(sum(coalesce(h.score_311, h.score)) FILTER (WHERE ST_DWithin(h.geom::geography, p.g, 1000)), 0),
+                  coalesce(max(coalesce(h.score_311, h.score)) FILTER (WHERE ST_DWithin(h.geom::geography, p.g, 300)), 0),
                   (SELECT min(ST_Distance(rp.geom::geography, p.g)) FROM core.risk_polygon rp
                     WHERE ST_DWithin(rp.geom::geography, p.g, 3000)),
                   (SELECT rp.tier FROM core.risk_polygon rp WHERE ST_DWithin(rp.geom::geography, p.g, 3000)
@@ -100,7 +100,9 @@ def main():
       "Page: https://kinder.rice.edu/research/measuring-flooding-houston-fire-department\n")
     w(f"**Station locations:** OSM (`amenity=fire_station`, named \"Houston Fire Department Station N\"): "
       f"{len(rows)} stations found. **Risk:** sum of 311 risk-hex scores within 300 m and 1 km of the station, "
-      "and its percentile among all stations (100 = most 311 flood history around it).\n")
+      "and its percentile among all stations (100 = most 311 flood history around it). Scores use the "
+      "311-only hex score (`score_311`), not the firefighter minimums added from these same comments, so the "
+      "comparison stays independent. \"Nearest risk area\" uses the final tiers, which do include them.\n")
     w("| Station | Officers' report | Score ≤300 m | pctile | Score ≤1 km | pctile | Nearest risk area | High/medium areas ≤1 km |")
     w("|---:|---|---:|---:|---:|---:|---|---:|")
     by = {r["num"]: r for r in rows}

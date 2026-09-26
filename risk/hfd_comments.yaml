@@ -1,0 +1,228 @@
+# Firefighter-reported flooding locations, transcribed from Appendix A (Officer Comments) of
+# "Measuring Flooding with the Houston Fire Department", S. Perry & R. Stein, Rice University /
+# Kinder Institute, report to HFD, 2019 (survey Sept-Oct 2018).
+# https://kinder.rice.edu/research/measuring-flooding-houston-fire-department
+#
+# Only comments naming a specific place are included. Territory-wide remarks ("most of our
+# territory floods") are not mappable and are left out.
+#
+# kind:
+#   intersection   streets: [A, B]                       -> point where A meets B
+#   segment        street: A, from: B, to: C             -> A between its junctions with B and C
+#   station_front  street: A, radius_m: R                -> A within R metres of the station
+# severity (sets a minimum risk tier; values in risk/config.yaml hfd_comments.min_score):
+#   cut_off      units cannot leave / station flooded, in ordinary heavy rain
+#   recurring    floods in most heavy rains
+#   major_event  flooded in the named storms (Harvey, Tax Day, Memorial Day, July 4)
+# Street names are regexes matched case-insensitively against OSM `name`.
+
+items:
+  - id: fs16_front
+    station: 16
+    kind: station_front
+    street: '.*'
+    radius_m: 250
+    severity: cut_off
+    quote: "We are not even able to leave ... because of flooding right outside the station."
+    note: "No street named; every road within 250 m of the station."
+
+  - id: fs31_crosstimbers
+    station: 31
+    kind: station_front
+    street: 'Crosstimbers'
+    radius_m: 500
+    severity: cut_off
+    quote: "Crosstimbers floods quickly and easily right in front of the station and up and down the street for a few blocks ... units get locked into the station."
+
+  - id: fs52_hartsook
+    station: 52
+    kind: station_front
+    street: 'Hartsook'
+    radius_m: 600
+    severity: cut_off
+    quote: "Usually when it floods we are not able to leave the station because of how bad Hartsook floods."
+
+  - id: fs45_mccarty
+    station: 45
+    kind: station_front
+    street: 'McCarty'
+    radius_m: 800
+    severity: cut_off
+    quote: "Station 45 becomes an island and cannot respond as we cannot get off McCarty Road due to flooding."
+
+  - id: fs68_front
+    station: 68
+    kind: station_front
+    street: '.*'
+    radius_m: 250
+    severity: cut_off
+    quote: "We are essentially flooded into our station due to proximity to the bayou that runs next to our station."
+
+  - id: fs35_front
+    station: 35
+    kind: station_front
+    street: '.*'
+    radius_m: 200
+    severity: cut_off
+    quote: "Flooding in front of station 35 causes delayed response."
+
+  - id: fs7_elgin_austin
+    station: 7
+    kind: intersection
+    streets: ['Elgin', 'Austin']
+    severity: cut_off
+    quote: "The most consistent area of flooding ... is on Elgin at Austin (in front of Station 7) ... progressively deeper and faster."
+
+  - id: fs72_bayarea_saturn
+    station: 72
+    kind: segment
+    street: 'Bay Area'
+    from: 'Saturn'
+    to: 'Space Center'
+    severity: cut_off
+    quote: "Bay Area Blvd and Saturn Lane floods all the way to the front of fire station 72 ... Bay Area Blvd and Space Center Blvd also floods."
+
+  - id: fs26_dixie
+    station: 26
+    kind: segment
+    street: '^Dixie'
+    from: 'Telephone'
+    to: 'Mykawa'
+    severity: cut_off
+    quote: "Fire Station 26 has flooded out 3 times in the past 5 years ... All of Dixie Drive from Telephone to Mykawa has been under several feet of water."
+
+  - id: fs83_richmond
+    station: 83
+    kind: station_front
+    street: 'Richmond|Breezewood'
+    radius_m: 700
+    severity: recurring
+    quote: "The main areas of flooding in the Station 83 territory is down Richmond from the Beltway west ... including Breezewood where Station 83 is located."
+
+  - id: fs40_telephone_griggs
+    station: 40
+    kind: intersection
+    streets: ['^Telephone', 'Griggs']
+    severity: recurring
+    quote: "Some areas need drains put in where water pools, especially on Telephone at Griggs."
+
+  - id: fs40_ost_delafield
+    station: 40
+    kind: intersection
+    streets: ['Old Spanish Trail', 'Delafield']
+    severity: recurring
+    quote: "... and Old Spanish Trail around Delafield."
+
+  - id: fs13_43rd_oakforest
+    station: 13
+    kind: intersection
+    streets: ['43rd', 'Oak Forest']
+    severity: recurring
+    quote: "Around 43rd and Oak Forest always floods on fast, hard rain."
+
+  - id: fs13_rosslyn_judiway
+    station: 13
+    kind: intersection
+    streets: ['Rosslyn', 'Judiway']
+    severity: recurring
+    quote: "Rosslyn and Judiway has a low area that holds high water when it rains for a while."
+
+  - id: fs9_maury_brooks
+    station: 9
+    kind: intersection
+    streets: ['^Maury', '^Brooks']
+    severity: recurring
+    quote: "The area around Maury @ Brooks experiences significant street flooding with only minimal rain."
+
+  - id: fs84_sweetwater
+    station: 84
+    kind: segment
+    street: 'Sweetwater'
+    from: '^West Road'
+    to: 'Canino'
+    severity: recurring
+    quote: "... and Sweetwater from West Rd to Canino."
+
+  - id: fs74_wmthouston_sweetwater
+    station: 74
+    kind: intersection
+    streets: ['Mount Houston', 'Sweetwater']
+    severity: recurring
+    quote: "... west Mt. Houston and Sweetwater ... water during Harvey would have been mid door area on engine 74."
+
+  - id: fs_chimneyrock_orem
+    station: null
+    kind: intersection
+    streets: ['Chimney Rock', 'Orem']
+    severity: recurring
+    quote: "chimney rock and west orem."
+
+  - id: fs_silber
+    station: null
+    kind: segment
+    street: '^Silber'
+    from: 'Katy Freeway|Interstate 10|I-10'
+    to: 'Westview'
+    severity: recurring
+    quote: "Silber Rd from feeder to Westview has drainage issues."
+
+  - id: fs72_bayarea_spacecenter
+    station: 72
+    kind: intersection
+    streets: ['Bay Area', 'Space Center']
+    severity: cut_off
+    quote: "Bay Area Blvd and Space Center Blvd also floods. This will prevent any fire truck (72, 71, 94) from being able to respond."
+
+  - id: fs61_almeda_genoa
+    station: 61
+    kind: segment
+    street: 'Almeda.?Genoa'
+    from: 'Orem'
+    to: 'Gulf Freeway|Interstate 45|I-45'
+    severity: major_event
+    quote: "During Harvey as well as ... Independence Day, Tax Day and Memorial Day floods, Almeda Genoa Rd from Orem to Gulf Freeway was under 2 feet+ water."
+
+  - id: fs61_fuqua
+    station: 61
+    kind: segment
+    street: '^Fuqua'
+    from: 'Gulf Freeway|Interstate 45|I-45'
+    to: '^Telephone'
+    severity: major_event
+    quote: "Fuqua St. from Gulf Freeway to Telephone Rd was under water."
+
+  - id: fs61_blackhawk
+    station: 61
+    kind: segment
+    street: 'Blackhawk'
+    from: '^Fuqua'
+    to: 'Lettie'
+    severity: major_event
+    quote: "Blackhawk St. was submerged from Fuqua to Lettie St. along with almost all of the adjacent residential streets."
+
+  - id: fs61_monroe
+    station: 61
+    kind: segment
+    street: '^Monroe'
+    from: 'Almeda.?Genoa'
+    to: 'Pan Air'
+    severity: major_event
+    quote: "Monroe Rd. was underwater from Almeda Genoa to Pan Air and from Fuqua to Beltway 8."
+
+  - id: fs61_mykawa
+    station: 61
+    kind: segment
+    street: '^Mykawa'
+    from: 'Beltway 8|Sam Houston'
+    to: 'Airport'
+    severity: major_event
+    quote: "Mykawa Rd was submerged from south of Beltway 8 to Airport Blvd."
+
+  - id: fs82_braeswood
+    station: 82
+    kind: station_front
+    street: 'Braeswood'
+    radius_m: 2500
+    severity: recurring
+    quote: "Braeswood has extensive flooding in our district."
+    note: "Station 82's district taken as North/South Braeswood within 2.5 km of the station."

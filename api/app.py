@@ -7,6 +7,7 @@ POST /route  {"from": [lat, lon], "to": [lat, lon], "areas": <GeoJSON FeatureCol
 GET  /risk.geojson   the risk-tier polygons (tier and aggregate counts only)
 GET  /risk_surface.png, /risk_surface.json   smoothed risk-surface overlay + bounds
 GET  /bayous.geojson  major bayou channels (OSM)
+GET  /hfd.geojson     firefighter-reported flooding locations (2018 HFD survey, published report)
 GET  /               the map page
 
 Responses carry geometry, distances, times and risk-polygon aggregates only:
@@ -32,6 +33,7 @@ RISK = ROOT / "risk" / "flood_risk_tiers.geojson"
 SURFACE_PNG = ROOT / "risk" / "risk_surface_overlay.png"
 SURFACE_META = ROOT / "risk" / "risk_surface_overlay.json"
 BAYOUS = ROOT / "data" / "osm" / "bayous.geojson"
+HFD = ROOT / "risk" / "hfd_locations.geojson"
 WEB = ROOT / "web" / "index.html"
 GH = os.getenv("GRAPHHOPPER_URL", "http://127.0.0.1:8989")
 BBOX = (-96.2, 29.2, -94.7, 30.4)  # graph extent
@@ -229,6 +231,13 @@ def bayous():
     if not BAYOUS.exists():
         raise HTTPException(404, "run risk/surface_overlay.py")
     return JSONResponse(json.loads(BAYOUS.read_text()), headers={"Cache-Control": "max-age=3600"})
+
+
+@app.get("/hfd.geojson")
+def hfd():
+    if not HFD.exists():
+        raise HTTPException(404, "run risk/hfd_locations.py")
+    return JSONResponse(json.loads(HFD.read_text()), headers={"Cache-Control": "max-age=300"})
 
 
 @app.get("/health")

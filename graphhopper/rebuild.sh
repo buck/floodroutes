@@ -10,6 +10,8 @@ JDK_BIN=$(dirname "$(readlink -f "$(command -v "$JAVA")")")
 GH_HEAP=${GH_HEAP:-4g}
 UNIT=floodroutes-graphhopper.service
 
+echo "== $(date -Is) firefighter locations"
+"$PYTHON" risk/hfd_locations.py || echo "   (kept previous risk/hfd_locations.geojson)"
 echo "== $(date -Is) risk surface"
 "$PYTHON" risk/build_risk.py
 "$PYTHON" risk/surface_overlay.py

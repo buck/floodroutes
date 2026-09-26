@@ -15,7 +15,7 @@ The flood data only lowers priority; it never removes a road.
 ## How the flood-aware route decides
 
 **Headline: avoiding Houston's flood history costs about half a minute on a typical trip.** Over 200 random city trips:
-- median +27–31 s (+2–3%), with 90% under about +2 minutes and none more than 50% longer;
+- median +27–40 s (+2–3%) across runs, with 90% under about +2½ minutes and none more than 50% longer (the upper end is after adding firefighter-reported locations);
 - about 80% of the trips whose normal route crosses a high-risk area avoid high-risk areas entirely on the flood-aware route.
 
 **Why detours are small**
@@ -170,10 +170,20 @@ As of 2026-09-25; see the docs for detail.
 - **Geocoding:** 97.7% of flood signals located (target 95%). 3,555 failures have neither a point nor an address, mostly 2011 migration records.
 - **Risk surface:** 4,095 polygons (483 high, 1,158 medium, 2,454 low) covering 107 km².
 - **200 random city trips** (ranges over three runs; the sample shifts while the background geocoder adds points):
-  - median +27–31 s (+2–3% time); none more than 50% longer;
+  - median +27–40 s (+2–3% time); none more than 50% longer;
   - of the ~130 trips whose normal route crosses a high-risk area, 76–82% avoid high-risk areas entirely on the flood-aware route;
   - API latency (both routes plus overlay, keep-alive client) median ~22 ms, p99 ~82 ms, after moving flood risk into an encoded value (was ~300 / ~850 ms).
 - **Top-10 hotspots:** 6 got a test trip through them and 4 of those are avoided. The two not avoided are by design (no reasonable alternative). The other 4 hotspots sit where short test trips never pass (freeway frontage, cul-de-sacs). See `docs/validation.md`.
+
+## Firefighter-reported flooding
+
+311 records where residents call from. The 2018 HFD officer survey (*Measuring Flooding with the Houston Fire Department*, Perry & Stein, Rice/Kinder, 2019) records where firefighters meet water. The 1,383 surveyed points are unpublished, but Appendix A's officer comments name specific streets.
+- **Transcribed:** `risk/hfd_comments.yaml`, 26 place-specific comments with station, quote, streets and severity.
+- **Mapped:** `risk/hfd_locations.py` maps them onto OSM roads (intersections, "X from Y to Z" stretches, the road in front of a station). 22 mapped; 4 could not be (listed in its output).
+- **In the risk surface:** each location sets a minimum hex score. `cut_off` (units can't leave the station) = 60 (high), `recurring` = 25 (medium), `major_event` = 10 (low); set in `risk/config.yaml` under `hfd_comments`.
+- **Effect:** 301 hexes touched, and 294 of them were *raised* above their 311 score. The places firefighters name are almost all under-reported by 311 (e.g. Bay Area Blvd at Saturn Ln to Space Center Blvd in Clear Lake, where Station 72's trucks can't get out).
+- **Map:** the "Firefighter reports (2018 HFD survey)" layer shows each location with its quote. Risk areas that include one say so in their tooltip.
+- **Independent check:** `docs/hfd_stations.md` compares the stations officers call cut off with the 311-only score around them. About half are in the top quarter of stations; the rest are where 311 misses station-access flooding.
 
 ## How much of Houston is at risk
 

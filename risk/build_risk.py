@@ -5,6 +5,10 @@ Rebuilds core.risk_hex and core.risk_polygon in one transaction and writes
 risk/flood_risk_tiers.geojson. The GeoJSON carries only tier, score and
 aggregate counts: no case numbers, text or addresses.
 
+Firefighter-reported locations (risk/hfd_locations.geojson, from the 2018 HFD
+survey comments) set a minimum score on the hexes they touch; the final hex
+score is max(311 score, firefighter minimum).
+
 Usage: build_risk.py
 """
 import collections
@@ -55,10 +59,15 @@ CREATE TABLE IF NOT EXISTS core.risk_polygon (
     config_sha  text NOT NULL
 );
 CREATE INDEX IF NOT EXISTS risk_polygon_geom ON core.risk_polygon USING gist (geom);
+ALTER TABLE core.risk_hex ADD COLUMN IF NOT EXISTS score_311 real;
+ALTER TABLE core.risk_hex ADD COLUMN IF NOT EXISTS hfd_floor real;
+ALTER TABLE core.risk_hex ADD COLUMN IF NOT EXISTS hfd_refs text[];
+ALTER TABLE core.risk_polygon ADD COLUMN IF NOT EXISTS hfd_refs text[];
 """
 
 DISSOLVE = """
-INSERT INTO core.risk_polygon
+INSERT INTO core.risk_polygon (id, tier, geom, score_max, score_mean, hexes, cases, storm_events,
+                               first_day, last_day, config_sha, hfd_refs)
 WITH parts AS (
     SELECT tier, (ST_Dump(ST_Union(geom))).geom AS g FROM core.risk_hex
     WHERE tier IS NOT NULL GROUP BY tier
@@ -68,7 +77,10 @@ WITH parts AS (
            (SELECT count(DISTINCT e) FROM core.risk_hex h2, unnest(h2.storm_events) e
              WHERE h2.tier = p.tier AND ST_Intersects(h2.geom, p.g)
                AND ST_Area(ST_Intersection(h2.geom, p.g)) > 0) nevents,
-           min(h.first_day) d0, max(h.last_day) d1
+           min(h.first_day) d0, max(h.last_day) d1,
+           (SELECT array_agg(DISTINCT r ORDER BY r) FROM core.risk_hex h3x, unnest(h3x.hfd_refs) r
+             WHERE h3x.tier = p.tier AND ST_Intersects(h3x.geom, p.g)
+               AND ST_Area(ST_Intersection(h3x.geom, p.g)) > 0) hrefs
     FROM parts p JOIN core.risk_hex h
       ON h.tier = p.tier AND ST_Intersects(h.geom, p.g) AND ST_Area(ST_Intersection(h.geom, p.g)) > 0
     GROUP BY p.tier, p.g
@@ -77,9 +89,38 @@ WITH parts AS (
 SELECT tier || '_' || lpad(row_number() OVER (PARTITION BY tier ORDER BY smax DESC)::text, 4, '0'),
        tier,
        ST_Transform(ST_SimplifyPreserveTopology(ST_Transform(g, 2278), %(tol_ft)s), 4326),
-       smax, smean, nhex, ncases, nevents, d0, d1, %(sha)s
+       smax, smean, nhex, ncases, nevents, d0, d1, %(sha)s, hrefs
 FROM agg
 """
+
+
+def hfd_hexes(cfg, res):
+    """hex -> (minimum score, [comment ids]) from firefighter-reported locations."""
+    hc = cfg.get("hfd_comments") or {}
+    path = ROOT / hc.get("file", "risk/hfd_locations.geojson")
+    if not hc.get("enabled") or not path.exists():
+        return {}
+    from shapely.geometry import shape
+    step = hc.get("sample_m", 15) / 111_320  # degrees, ~15 m
+    out = {}
+    for f in json.loads(path.read_text())["features"]:
+        floor = hc["min_score"][f["properties"]["severity"]]
+        g = shape(f["geometry"])
+        if g.geom_type == "Point":
+            r = hc.get("point_radius_m", 60) / 111_320
+            pts = [(g.y, g.x)] + [(g.y + r * dy, g.x + r * dx / 0.867)
+                                  for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1), (.7, .7), (-.7, .7), (.7, -.7), (-.7, -.7))]
+        else:
+            lines = g.geoms if hasattr(g, "geoms") else [g]
+            pts = []
+            for ln in lines:
+                n = max(2, int(ln.length / step) + 1)
+                pts += [(p.y, p.x) for p in (ln.interpolate(i / (n - 1), normalized=True) for i in range(n))]
+        for lat, lon in pts:
+            hx = h3.latlng_to_cell(lat, lon, res)
+            fl, refs = out.get(hx, (0.0, set()))
+            out[hx] = (max(fl, floor), refs | {f["properties"]["id"]})
+    return out
 
 
 def main() -> int:
@@ -123,9 +164,14 @@ def main() -> int:
                 a["d0"] = min(a["d0"] or day, day)
                 a["d1"] = max(a["d1"] or day, day)
 
+        hfd = hfd_hexes(cfg, res)
+        empty = {"s": 0.0, "n": 0, "strong": 0, "moderate": 0, "weak": 0, "ev": set(), "d0": None, "d1": None}
         hex_rows = []
-        for hx, a in acc.items():
-            score = a["s"] * (1 + cfg["recurrence"]["per_event"] * len(a["ev"]))
+        for hx in set(acc) | set(hfd):
+            a = acc.get(hx, empty)
+            score_311 = a["s"] * (1 + cfg["recurrence"]["per_event"] * len(a["ev"]))
+            floor, refs = hfd.get(hx, (0.0, set()))
+            score = max(score_311, floor)
             tier = None
             for t in reversed(TIERS):
                 if score >= th[t]:
@@ -134,12 +180,14 @@ def main() -> int:
             ring = [(lng, lat) for lat, lng in h3.cell_to_boundary(hx)]
             wkt = "POLYGON((" + ",".join(f"{x} {y}" for x, y in ring + ring[:1]) + "))"
             hex_rows.append((hx, wkt, score, tier, a["n"], a["strong"], a["moderate"], a["weak"],
-                             sorted(a["ev"]), a["d0"], a["d1"], sha))
+                             sorted(a["ev"]), a["d0"], a["d1"], sha, score_311, floor or None,
+                             sorted(refs) or None))
 
         with conn.transaction():
             conn.execute("TRUNCATE core.risk_hex, core.risk_polygon")
             with conn.cursor().copy("""COPY core.risk_hex (h3, geom, score, tier, cases, strong, moderate, weak,
-                                       storm_events, first_day, last_day, config_sha) FROM STDIN""") as cp:
+                                       storm_events, first_day, last_day, config_sha,
+                                       score_311, hfd_floor, hfd_refs) FROM STDIN""") as cp:
                 for r in hex_rows:
                     cp.write_row((r[0], f"SRID=4326;{r[1]}", *r[2:]))
             conn.execute(DISSOLVE, {"min_hexes": cfg["min_hexes_per_polygon"],
@@ -152,19 +200,22 @@ def main() -> int:
             ORDER BY array_position(ARRAY['high','medium','low'], tier)""").fetchall()
         feats = conn.execute("""
             SELECT id, tier, round(score_max::numeric, 1), round(score_mean::numeric, 1), hexes, cases,
-                   storm_events, first_day::text, last_day::text, ST_AsGeoJSON(geom, 6)
+                   storm_events, first_day::text, last_day::text, ST_AsGeoJSON(geom, 6), hfd_refs
             FROM core.risk_polygon ORDER BY array_position(ARRAY['high','medium','low'], tier), id""").fetchall()
 
     fc = {"type": "FeatureCollection", "features": [
         {"type": "Feature", "id": f[0],
          "properties": {"tier": f[1], "score_max": float(f[2]), "score_mean": float(f[3]), "hexes": f[4],
-                        "cases": f[5], "storm_events": f[6], "first_day": f[7], "last_day": f[8]},
+                        "cases": f[5], "storm_events": f[6], "first_day": f[7], "last_day": f[8],
+                        **({"firefighter_reports": f[10]} if f[10] else {})},
          "geometry": json.loads(f[9])} for f in feats]}
     GEOJSON.write_text(json.dumps(fc, separators=(",", ":")))
     print(f"{len(rows):,} located signals ({capped:,} capped as same-hex same-day duplicates) -> "
           f"{len(hex_rows):,} hexes; tiers: " +
           "; ".join(f"{t}: {n} polygons / {h} hexes / {c} cases / {a} km2 / max {mp} pts / total {tp} pts"
                     for t, n, h, c, a, mp, tp in summary))
+    raised = sum(1 for r in hex_rows if r[13] and r[13] > r[12])
+    print(f"firefighter reports: {len(hfd):,} hexes touched, {raised:,} raised above their 311 score")
     print(f"wrote {GEOJSON} ({GEOJSON.stat().st_size / 1e6:.1f} MB)")
     return 0
 

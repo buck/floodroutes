@@ -31,6 +31,20 @@ thresholds:
   medium: 25.0
   high: 60.0
 
+# Firefighter-reported flooding (2018 HFD survey comments, risk/hfd_comments.yaml ->
+# risk/hfd_locations.py -> risk/hfd_locations.geojson). Each mapped location sets a minimum
+# score on the hexes it touches: cut_off = units cannot leave the station in ordinary heavy
+# rain; recurring = floods in most heavy rains; major_event = flooded in the named storms.
+hfd_comments:
+  enabled: true
+  file: risk/hfd_locations.geojson
+  min_score:
+    cut_off: 60        # high
+    recurring: 25      # medium
+    major_event: 10    # low
+  sample_m: 15         # spacing of sample points along mapped streets
+  point_radius_m: 60   # radius around a mapped intersection
+
 # Polygon output
 simplify_m: 10             # Douglas-Peucker tolerance in metres
 min_hexes_per_polygon: 1
