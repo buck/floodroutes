@@ -374,7 +374,7 @@ function setEnd(which, latlng, label, { lookup = false, go = true, acc = null } 
 }
 
 function resetAll() {
-  stopDrive();
+  stopDrive({ redraw: false });
   for (const w of ['from', 'to']) { if (ends[w]?.marker) map.removeLayer(ends[w].marker); ends[w] = null; input(w).value = ''; }
   clearRoute(); hint('Type an address or tap the map.'); syncUrl();
 }
@@ -494,13 +494,15 @@ function updatePeek() {
     : 'Flood-aware routing · tap for details';
 }
 
-async function route(fit = true, { quiet = false } = {}) {
+// origin: start from here instead of the trip's start (drive mode re-routes from the car's position
+// without overwriting the planned trip, so Stop can bring the original trip back)
+async function route(fit = true, { quiet = false, origin = null } = {}) {
   if (!ends.from || !ends.to) { clearRoute(); hint(ends.from ? 'Now choose a destination.' : 'Type an address or tap the map.'); syncUrl(); return null; }
   const seq = ++routeSeq;
   const q = e => `${e.lat.toFixed(6)},${e.lng.toFixed(6)}`;
   if (!quiet) hint('Routing…');
   let r, d;
-  try { r = await fetch(`route?from=${q(ends.from)}&to=${q(ends.to)}`); d = await r.json(); }
+  try { r = await fetch(`route?from=${q(origin || ends.from)}&to=${q(ends.to)}`); d = await r.json(); }
   catch (e) { if (!quiet) hint('Network error'); return null; }
   if (seq !== routeSeq) return null;
   if (!r.ok) { hint(d.detail || 'Routing failed'); return null; }
@@ -677,9 +679,10 @@ function startDrive(mode) {
   }
 }
 
-function stopDrive() {
+function stopDrive({ redraw = true } = {}) {
   if (!driving) return;
   driving = false;
+  if (redraw) setTimeout(() => route(true), 0);  // back to the planned trip, from its original start
   if (canSpeak) setTimeout(() => { if (!driving) speechSynthesis.cancel(); }, 2500);  // let "arrived" finish
   if (watchId !== null) navigator.geolocation.clearWatch(watchId);
   watchId = null;
@@ -761,11 +764,8 @@ async function onPosition(p) {
                                       || gap > CFG.rerouteEveryS * 1000))) {
     forceReroute = false;
     rerouting = true; lastRerouteAt = now;
-    if (ends.from?.marker) ends.from.marker.setLatLng(here);
-    ends.from = { lat: here.lat, lng: here.lng, label: 'My location', marker: ends.from?.marker, mine: true };
-    input('from').value = 'My location';
     const before = lastRoute;
-    const d = await route(false, { quiet: true });
+    const d = await route(false, { quiet: true, origin: here });
     refreshReports();
     if (d && sim === 'follow' && d !== before) {  // the simulated car takes the new advice
       simPath = d.flood_aware.geometry.coordinates.map(c => [c[1], c[0]]); simDist = 0;
