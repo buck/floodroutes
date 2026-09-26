@@ -16,7 +16,7 @@
 
 let
   root = "/srv/floodroutes";
-  apiPython = pkgs.python3.withPackages (ps: with ps; [ fastapi uvicorn httpx shapely pyproj ]);
+  apiPython = pkgs.python3.withPackages (ps: with ps; [ fastapi uvicorn httpx shapely pyproj pyyaml ]);
 in
 {
   users.groups.floodroutes = { };
@@ -58,6 +58,8 @@ in
       Type = "simple";
       User = "floodroutes";
       WorkingDirectory = root;
+      # live flood reports from app users (api/live.py); outside /srv so deploys never touch it
+      Environment = [ "LIVE_DB=/var/lib/floodroutes/live.sqlite" ];
       # 4 worker processes: one Python process only uses one core (~20 routes/s on gitano)
       # no access log: request lines carry visitors' addresses and coordinates
       ExecStart = "${apiPython}/bin/uvicorn api.app:app --host 127.0.0.1 --port 8086 --proxy-headers --workers 4 --no-access-log";
@@ -89,6 +91,7 @@ in
       # Rate limits per visitor (real address, in memory only)
       limit_req_zone $binary_remote_addr zone=fr_route:10m rate=3r/s;
       limit_req_zone $binary_remote_addr zone=fr_search:10m rate=10r/s;
+      limit_req_zone $binary_remote_addr zone=fr_report:10m rate=2r/s;
       limit_req_status 429;
       limit_req_log_level info;
 
@@ -110,6 +113,10 @@ in
       locations."~ ^/(route|reverse)$" = {
         proxyPass = "http://127.0.0.1:8086";
         extraConfig = "limit_req zone=fr_route burst=20 nodelay;";
+      };
+      locations."= /reports" = {
+        proxyPass = "http://127.0.0.1:8086";
+        extraConfig = "limit_req zone=fr_report burst=10 nodelay;";
       };
       locations."= /geocode" = {
         proxyPass = "http://127.0.0.1:8086";

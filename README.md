@@ -13,6 +13,13 @@ The flood data only lowers priority; it never removes a road.
 - **Layers:** routing risk areas, smoothed risk surface, bayous, firefighter reports.
 - **Phones:** the trip box sits at the top and results in a bottom sheet. With location permission already granted, the start defaults to My location.
 - **▶ Drive:** follows the GPS position and keeps the screen awake. It re-routes when off the route by more than ~50 m, or every 20 s, and shows remaining time and distance plus the next flood-history area ahead.
+- **Live flood reports from app users:**
+  - reporting: 🌊 Water on road / ⛔ Impassable / ✓ Water gone, in the drive card, or "Report at my location" on phones;
+  - handling: snapped to the nearest road, grouped into spots, applied to the flood-aware route (water = strong penalty; impassable from one device = strong penalty; from two devices within 30 min = closed; two "Water gone" = cleared);
+  - reports expire after 2–3 h;
+  - shown in the "Live flood reports" layer, and announced by voice when ahead.
+
+  Stored: road point, kind, time, GPS accuracy, hashed device token; nothing else. Rules in `api/live_config.yaml`; admin with `python -m api.live_admin`.
 - **Voice alerts** (browser speech, no network; 🔊/🔇 in the drive card, remembered):
   - "Flood-aware route. Watch for water. Turn around, don't drown." at the start;
   - medium/high flood-history areas on the road being driven, about a quarter mile ahead ("High flood-risk area ahead in 1,200 feet. Flooded in 5 storms.") and on entry;
@@ -130,6 +137,8 @@ Each makes detours longer and more frequent. How much delay drivers will accept 
 
 ## Tunable parameters
 
+**The complete as-built reference is [`docs/PARAMETERS.md`](docs/PARAMETERS.md).** It lists every parameter with its current value, location, purpose and what to run after changing it. The sections below describe the main configuration files.
+
 ### `classify/rules.yaml` (Phase 2)
 | Key | Meaning |
 |---|---|
@@ -199,7 +208,7 @@ Queries take about 1 ms, or ~150 ms for "A & B" intersections. Typed addresses a
 - `GET /geocode?q=`, `GET /reverse?lat=&lon=`: address search (see *Address search*).
 - `GET /health`
 
-Tests: `python -m pytest tests/ -q` (15 tests; they need GraphHopper running).
+Tests: `python -m pytest tests/ -q` (18 tests; they need GraphHopper running).
 - **Routing:** response shape; the flood route never has more high-risk exposure than the direct one; live areas are hard exclusions that leave the direct route alone; the fixture file works; out-of-area points get a 422.
 - **Layers:** `/risk.geojson`, `/hfd.geojson` (only published-report fields, valid severities, all inside Houston), `/risk_surface.png` and `.json` (a real PNG with sane bounds), `/bayous.geojson`, and the map page (banner text present, scripts only from cdnjs).
 - **Consistency:** every firefighter report a risk area cites exists in `/hfd.geojson`; `/health` reports both services up.

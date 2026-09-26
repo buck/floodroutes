@@ -13,7 +13,8 @@ DEST=/srv/floodroutes
 
 # 1. everything except the graph
 rsync -a --delete --relative --chmod=Du=rwx,Dgo=rx,Fu=rw,Fgo=r \
-  api/app.py api/__init__.py api/geocoder.py api/addrnorm.py web/ data/geocoder.sqlite \
+  api/app.py api/__init__.py api/geocoder.py api/addrnorm.py api/live.py api/live_config.yaml api/live_admin.py \
+  web/ data/geocoder.sqlite \
   risk/flood_risk_tiers.geojson risk/hfd_locations.geojson \
   risk/risk_surface_overlay.png risk/risk_surface_overlay.json \
   data/osm/bayous.geojson \

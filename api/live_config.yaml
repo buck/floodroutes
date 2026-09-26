@@ -1,0 +1,31 @@
+# Live flood reports from app users ("Water on road" / "Impassable" / "Water's gone").
+# Read by api/live.py when the API starts; restart the API (or redeploy) after editing.
+# Documented with every other tunable in docs/PARAMETERS.md.
+
+# --- accepting a report
+max_accuracy_m: 100        # reject reports whose GPS accuracy is worse than this
+snap_max_m: 60             # the report is snapped to the nearest road; reject if the road is farther than this
+per_device_max: 6          # at most this many reports per device ...
+per_device_window_min: 10  # ... per this many minutes
+
+# --- grouping reports into one flooded spot
+cluster_radius_m: 80       # reports within this distance of each other describe the same spot
+area_radius_m: 60          # radius of the area around a spot that routing treats as flooded
+
+# --- how long reports count
+expire_water_min: 120      # "Water on road"
+expire_impassable_min: 180 # "Impassable"
+expire_clear_min: 180      # "Water's gone" (how long a clear keeps counting against older reports)
+
+# --- trust rules (a spot's state from the distinct devices reporting it)
+close_min_devices: 2       # "Impassable" from this many different devices closes the road ...
+close_window_min: 30       # ... if their reports fall within this many minutes of each other
+clear_min_devices: 2       # "Water's gone" from this many devices (after the last hazard report) clears the spot
+
+# --- effect on the flood-aware route (priority multiplier; 0 = road avoided entirely)
+priority_closed: 0         # two-device "Impassable"
+priority_impassable_single: 0.05  # one device says impassable: strong penalty, not a closure
+priority_water: 0.1        # "Water on road"
+priority_disputed: 0.25    # a hazard with one "Water's gone" after it
+
+max_active_spots: 200      # at most this many spots are applied to routing (performance guard)

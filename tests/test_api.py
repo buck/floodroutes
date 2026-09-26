@@ -162,7 +162,7 @@ def test_health():
 def test_api_source_never_touches_resident_text():
     """Static guard: the API must not read 311 free-text columns or the case tables at all."""
     api = Path(__file__).resolve().parent.parent / "api"
-    src = "".join((api / f).read_text() for f in ("app.py", "geocoder.py", "addrnorm.py"))
+    src = "".join((api / f).read_text() for f in ("app.py", "geocoder.py", "addrnorm.py", "live.py"))
     for forbidden in ("description", "latest_notes", "resolution_notes", "conflict_notes",
                       "service_request", "flood_signal", "incident_address", "psycopg"):
         assert forbidden not in src, forbidden
@@ -193,3 +193,53 @@ def test_about_page():
     assert r.status_code == 200 and "text/html" in r.headers["content-type"]
     assert "Not for emergency use" in r.text and "911" in r.text
     assert 'href="about"' in client.get("/").text
+
+
+# --- live flood reports ---------------------------------------------------------------
+
+import pytest
+
+
+@pytest.fixture
+def live(tmp_path, monkeypatch):
+    """A throwaway report store so tests never touch data/live.sqlite."""
+    import api.app as appmod
+    from api.live import LiveStore
+    store = LiveStore(tmp_path / "live.sqlite")
+    monkeypatch.setattr(appmod, "_live", store)
+    return store
+
+
+def report(kind, lat, lon, device, accuracy=10):
+    return client.post("/reports", json={"lat": lat, "lon": lon, "accuracy": accuracy, "kind": kind, "device": device})
+
+
+def test_report_accepted_and_listed_without_reporter_data(live):
+    r = report("water", 29.7800, -95.4245, "device-test-A")
+    assert r.status_code == 200 and r.json()["spot"]["state"] == "water"
+    fc = client.get("/reports").json()
+    assert len(fc["features"]) == 1
+    assert set(fc["features"][0]["properties"]) == {"state", "reports", "devices", "age_min", "expires_min"}
+
+
+def test_two_devices_close_a_road_for_the_flood_route_only(live):
+    base = client.get("/route", params={"from": A, "to": B}).json()
+    line = LineString(base["flood_aware"]["geometry"]["coordinates"])
+    mid = line.interpolate(0.5, normalized=True)
+    assert report("impassable", mid.y, mid.x, "device-test-A").json()["spot"]["state"] == "impassable"
+    assert report("impassable", mid.y, mid.x, "device-test-B").json()["spot"]["state"] == "closed"
+    d = client.get("/route", params={"from": A, "to": B}).json()
+    assert d["live_reports_used"] == 1
+    road = client.get("/reports").json()["features"][0]["geometry"]["coordinates"]
+    spot = __import__("shapely.geometry", fromlist=["Point"]).Point(road).buffer(0.0003)  # ~30 m, inside the 60 m area
+    assert not LineString(d["flood_aware"]["geometry"]["coordinates"]).intersects(spot)
+    assert d["baseline"]["distance_m"] == base["baseline"]["distance_m"]
+
+
+def test_report_validation_and_device_limit(live):
+    assert report("water", 29.78, -95.4245, "device-test-A", accuracy=500).status_code == 422
+    assert report("flood", 29.78, -95.4245, "device-test-A").status_code == 422
+    assert report("water", 40.7, -74.0, "device-test-A").status_code == 422
+    for _ in range(6):
+        assert report("water", 29.78, -95.4245, "device-test-C").status_code == 200
+    assert report("water", 29.78, -95.4245, "device-test-C").status_code == 429

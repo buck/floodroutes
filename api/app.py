@@ -8,6 +8,8 @@ GET  /risk.geojson   the risk-tier polygons (tier and aggregate counts only)
 GET  /risk_surface.png, /risk_surface.json   smoothed risk-surface overlay + bounds
 GET  /bayous.geojson  major bayou channels (OSM)
 GET  /hfd.geojson     firefighter-reported flooding locations (2018 HFD survey, published report)
+POST /reports       {"lat","lon","accuracy","kind": water|impassable|clear,"device"}: a live flood report
+GET  /reports        active report spots (GeoJSON; no reporter data)
 GET  /geocode?q=     address / place / street / "A & B" search (self-hosted: Census TIGER + OSM)
 GET  /reverse?lat=&lon=  nearest address label for a map point
 GET  /               the map page
@@ -43,6 +45,7 @@ GH = os.getenv("GRAPHHOPPER_URL", "http://127.0.0.1:8989")
 BBOX = (-96.2, 29.2, -94.7, 30.4)  # graph extent
 TIER_ORDER = {"high": 0, "medium": 1, "low": 2}
 MAX_LIVE_AREAS = 200
+LIVE_DB = Path(os.getenv("LIVE_DB", str(ROOT / "data" / "live.sqlite")))
 
 to_ft = Transformer.from_crs("EPSG:4326", "EPSG:2278", always_xy=True).transform
 
@@ -167,8 +170,32 @@ def live_model(areas: dict | None) -> dict | None:
             "areas": {"type": "FeatureCollection", "features": out}}
 
 
+_live = None
+
+
+def live_store():
+    """User flood reports (api/live.py); created on first use so imports stay cheap."""
+    global _live
+    if _live is None:
+        from .live import LiveStore
+        _live = LiveStore(LIVE_DB)
+    return _live
+
+
+def merge_models(*models):
+    """Stack custom models: each one's priority rules stay a separate if-block."""
+    models = [m for m in models if m]
+    if not models:
+        return None
+    return {"priority": [st for m in models for st in m["priority"]],
+            "areas": {"type": "FeatureCollection",
+                      "features": [f for m in models for f in m["areas"]["features"]]}}
+
+
 async def compare(a, b, areas=None):
-    cm = live_model(areas)
+    request_model = live_model(areas)
+    reports_model = live_store().custom_model()
+    cm = merge_models(request_model, reports_model)
     client = gh_client()
     base, flood = await asyncio.gather(gh_route(client, a, b, "car"),
                                        gh_route(client, a, b, "car_flood", cm))
@@ -196,7 +223,8 @@ async def compare(a, b, areas=None):
         "risk_exposure_m": {"baseline": exposure(base["hotspots_crossed"]),
                             "flood_aware": exposure(flood["hotspots_crossed"])},
         "hotspots_avoided": avoided,
-        "live_exclusions": len(cm["areas"]["features"]) if cm else 0,
+        "live_exclusions": len(request_model["areas"]["features"]) if request_model else 0,
+        "live_reports_used": len(reports_model["areas"]["features"]) if reports_model else 0,
         "disclaimer": "Avoids streets with a history of flooding. Absence of reports does not mean "
                       "a street is dry. Turn around, don't drown.",
     }
@@ -220,6 +248,46 @@ async def route_post(body: dict = Body(...)):
     except (KeyError, TypeError, ValueError, IndexError):
         raise HTTPException(422, "body needs 'from' and 'to' as [lat, lon]")
     return fast_json(await compare(a, b, body.get("areas")))
+
+
+@app.post("/reports")
+async def post_report(body: dict = Body(...)):
+    from .live import KINDS
+    cfg = live_store().cfg
+    try:
+        lat, lon = float(body["lat"]), float(body["lon"])
+        accuracy = float(body.get("accuracy") or 0)
+        kind, token = str(body["kind"]), str(body["device"])
+    except (KeyError, TypeError, ValueError):
+        raise HTTPException(422, "body needs lat, lon, accuracy, kind and device")
+    check_point(lat, lon)
+    if kind not in KINDS:
+        raise HTTPException(422, f"kind must be one of {sorted(KINDS)}")
+    if not (8 <= len(token) <= 100):
+        raise HTTPException(422, "device token must be 8-100 characters")
+    if accuracy <= 0 or accuracy > cfg["max_accuracy_m"]:
+        raise HTTPException(422, f"GPS accuracy must be within {cfg['max_accuracy_m']} m to report")
+    import time as _t
+    from .live import device_hash, metres
+    if live_store().device_recent(device_hash(token), _t.time()) >= cfg["per_device_max"]:
+        raise HTTPException(429, "too many reports from this device; try again in a few minutes")
+    r = await gh_client().get(f"{GH}/nearest", params={"point": f"{lat},{lon}", "profile": "car"})
+    if r.status_code != 200:
+        raise HTTPException(502, "could not find the nearest road")
+    rlon, rlat = r.json()["coordinates"][:2]
+    if metres(lat, lon, rlat, rlon) > cfg["snap_max_m"]:
+        raise HTTPException(422, "not on or near a road")
+    live_store().add(kind, rlat, rlon, token, accuracy)
+    spot = next((sp for sp in live_store().spots() if metres(rlat, rlon, sp["lat"], sp["lon"]) <= cfg["cluster_radius_m"]), None)
+    return {"ok": True, "road_point": [rlat, rlon], "spot": spot}
+
+
+@app.get("/reports")
+def get_reports():
+    return JSONResponse({"type": "FeatureCollection", "features": [
+        {"type": "Feature", "geometry": {"type": "Point", "coordinates": [round(sp["lon"], 6), round(sp["lat"], 6)]},
+         "properties": {k: sp[k] for k in ("state", "reports", "devices", "age_min", "expires_min")}}
+        for sp in live_store().spots()]}, headers={"Cache-Control": "no-store"})
 
 
 @app.get("/risk.geojson")

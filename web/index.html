@@ -59,6 +59,13 @@
   .actions { display: flex; gap: 8px; margin: 8px 0 2px; }
   .actions button { flex: 1; padding: 7px 10px; }
   #peek { display: none; }
+  .report-row { display: flex; gap: 6px; margin-top: 8px; }
+  .report-row button { flex: 1; padding: 9px 4px; font-weight: 600; font-size: 13px; }
+  .phone-only { display: none; }
+  .live { display: inline-block; padding: 0 6px; border-radius: 4px; color: #fff; font-size: 12px; font-weight: 600; }
+  .live.closed { background: #111827; } .live.impassable { background: #b91c1c; }
+  .live.water { background: #0284c7; } .live.disputed { background: #6b7280; }
+  .livepin { font-size: 22px; line-height: 22px; text-align: center; filter: drop-shadow(0 1px 2px rgba(0,0,0,.5)); }
   /* drive bar */
   #drive { display: none; position: fixed; z-index: 950; right: 12px; top: calc(var(--banner-h) + 12px); width: 350px;
     padding: 10px 12px; }
@@ -88,6 +95,7 @@
     #drive { left: 8px; right: 8px; width: auto; top: calc(var(--banner-h) + 6px); }
     .leaflet-control-zoom { display: none; }
     .sim-actions { display: none !important; }   /* simulation is a presentation tool; ?sim= still works */
+    .phone-only { display: block; }
   }
 </style>
 </head>
@@ -115,12 +123,19 @@
   <h1>Houston flood-aware routing</h1>
   <div id="tripSlot"></div>
   <div id="result"></div>
+  <div id="reportHere" class="phone-only">
+    <div class="muted" style="margin-top:6px">Report flooding at my location</div>
+    <div class="report-row">
+      <button data-kind="water">🌊 Water</button><button data-kind="impassable">⛔ Impassable</button><button data-kind="clear">✓ Gone</button>
+    </div>
+  </div>
   <details id="layers"><summary>Map layers</summary>
   <div style="margin:4px 0 8px">
     <label><input type="checkbox" id="riskToggle" checked> Risk areas (routing tiers)</label><br>
     <label><input type="checkbox" id="surfaceToggle"> Risk surface (smoothed)</label><br>
     <label><input type="checkbox" id="bayouToggle" checked> Bayous</label><br>
-    <label><input type="checkbox" id="hfdToggle" checked> Firefighter reports (2018 HFD survey)</label>
+    <label><input type="checkbox" id="hfdToggle" checked> Firefighter reports (2018 HFD survey)</label><br>
+    <label><input type="checkbox" id="liveToggle" checked> Live flood reports from app users</label>
   </div>
   <div class="muted" style="font-size:12px">
     <span class="tier high">high</span> <span class="tier medium">medium</span> <span class="tier low">low</span>
@@ -140,11 +155,37 @@
   <div class="muted" id="driveTo"></div>
   <div class="next" id="driveNext"></div>
   <div class="muted" id="driveNote" style="font-size:12px"></div>
+  <div class="report-row">
+    <button data-kind="water" title="There is water on the road here">🌊 Water on road</button>
+    <button data-kind="impassable" title="The road here cannot be driven">⛔ Impassable</button>
+    <button data-kind="clear" title="The water here is gone">✓ Water gone</button>
+  </div>
 </div>
 <button id="recenter" class="card">◎ Recenter</button>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script>
+// ---- settings (documented in docs/PARAMETERS.md, section "Map page")
+const CFG = {
+  offRouteM: 50,              // re-route when this far off the blue route ...
+  offRouteMaxAccuracyM: 60,   // ... and the GPS fix is at least this good
+  rerouteMinGapS: 5,          // minimum time between off-route re-routes (real drive)
+  rerouteMinGapSimS: 3,       // same, in simulation
+  rerouteEveryS: 20,          // re-route this often anyway, to pick up new reports
+  arriveM: 40,                // "arrived" within this distance of the destination
+  voiceAheadM: 400,           // announce a flood area this far ahead (~a quarter mile)
+  voiceTiers: ['high', 'medium'],  // history tiers that get voice alerts
+  liveNearRouteM: 40,         // a live report counts as "on the route" within this distance
+  simSpeedMps: 13.4,          // simulated car speed at 1x (~30 mph)
+  simSpeeds: [4, 8, 16],      // speed-up choices for simulation
+  simStepS: 0.5,              // simulation update interval
+  locateMaxS: 6,              // "my location": keep the best fix for up to this long ...
+  locateGoodM: 25,            // ... or stop early at this accuracy
+  roughFixM: 60,              // show "±N m" after My location when accuracy is worse than this
+  suggestDelayMs: 150,        // pause after typing before asking for suggestions
+  suggestLimit: 6,            // suggestions shown
+  reportsRefreshS: 60,        // refresh the live-reports layer this often
+};
 const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -234,6 +275,73 @@ fetch('hfd.geojson').then(r => r.ok ? r.json() : null).then(fc => {
 });
 $('hfdToggle').onchange = e => { if (hfdLayer) e.target.checked ? hfdLayer.addTo(map) : map.removeLayer(hfdLayer); };
 
+// ---- live flood reports from app users
+const liveLabel = { closed: 'Road closed', impassable: 'Impassable', water: 'Water on road', disputed: 'Disputed' };
+const liveIcon = { closed: '⛔', impassable: '⛔', water: '🌊', disputed: '❔' };
+let liveSpots = [], liveLayer = L.layerGroup().addTo(map);
+async function refreshReports() {
+  try {
+    const r = await fetch('reports', { cache: 'no-store' }); if (!r.ok) return;
+    const fc = await r.json();
+    liveSpots = fc.features.map(f => ({ lat: f.geometry.coordinates[1], lon: f.geometry.coordinates[0], ...f.properties }));
+    liveLayer.clearLayers();
+    for (const sp of liveSpots) {
+      L.marker([sp.lat, sp.lon], { icon: L.divIcon({ className: '', iconSize: [26, 26], iconAnchor: [13, 13],
+          html: `<div class="livepin" style="opacity:${sp.state === 'disputed' ? .55 : 1}">${liveIcon[sp.state]}</div>` }) })
+        .bindTooltip(`<span class="live ${sp.state}">${liveLabel[sp.state]}</span> reported by app users<br>` +
+          `${sp.reports} report${sp.reports === 1 ? '' : 's'} from ${sp.devices} device${sp.devices === 1 ? '' : 's'} · ` +
+          `${sp.age_min} min ago · expires in ${sp.expires_min} min`)
+        .addTo(liveLayer);
+    }
+  } catch (e) {}
+}
+refreshReports(); setInterval(refreshReports, CFG.reportsRefreshS * 1000);
+$('liveToggle').onchange = e => e.target.checked ? liveLayer.addTo(map) : map.removeLayer(liveLayer);
+
+function deviceToken() {
+  let t = null;
+  try { t = localStorage.getItem('floodroutes.device'); } catch (e) {}
+  if (!t) {
+    t = (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2) + Date.now());
+    try { localStorage.setItem('floodroutes.device', t); } catch (e) {}
+  }
+  return t;
+}
+async function sendReport(kind, pos) {
+  const r = await fetch('reports', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ lat: pos.lat, lon: pos.lng, accuracy: pos.accuracy, kind, device: deviceToken() }) });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.detail || 'Report failed');
+  await refreshReports();
+  return d;
+}
+const reportText = { water: 'Water on road reported', impassable: 'Impassable reported', clear: '"Water gone" reported' };
+document.querySelectorAll('#drive .report-row button').forEach(b => b.onclick = async () => {
+  if (!lastPos) { $('driveNote').textContent = 'Waiting for a GPS position before reporting.'; return; }
+  try {
+    const d = await sendReport(b.dataset.kind, lastPos);
+    $('driveNote').textContent = `${reportText[b.dataset.kind]}. Thank you.` + (d.spot ? ` Spot: ${liveLabel[d.spot.state]} (${d.spot.devices} device${d.spot.devices === 1 ? '' : 's'}).` : '');
+    say(b.dataset.kind === 'clear' ? 'Thanks. Report sent.' : 'Report sent. Rerouting.');
+    forceReroute = true;
+  } catch (e) { $('driveNote').textContent = e.message; }
+});
+document.querySelectorAll('#reportHere .report-row button').forEach(b => b.onclick = () => {
+  if (!navigator.geolocation) { hint('This browser cannot share its location.'); return; }
+  hint('Finding your location to report…');
+  let best = null;
+  const id = navigator.geolocation.watchPosition(p => { if (!best || p.coords.accuracy < best.accuracy) best = p.coords; },
+    () => {}, { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 });
+  setTimeout(async () => {
+    navigator.geolocation.clearWatch(id);
+    if (!best) { hint('Could not get your location.'); return; }
+    try {
+      const d = await sendReport(b.dataset.kind, { lat: best.latitude, lng: best.longitude, accuracy: best.accuracy });
+      hint(`${reportText[b.dataset.kind]} at your location. Thank you.`);
+      if (ends.from && ends.to) route(false);
+    } catch (e) { hint(e.message); }
+  }, CFG.locateMaxS * 1000);
+});
+
 // ---- trip state
 const ends = { from: null, to: null };
 let lines = [], routeSeq = 0, lastRoute = null;
@@ -256,7 +364,7 @@ function setEnd(which, latlng, label, { lookup = false, go = true, acc = null } 
   if (lookup || !label) {
     fetch(`reverse?lat=${latlng.lat.toFixed(6)}&lon=${latlng.lng.toFixed(6)}`).then(r => r.ok ? r.json() : null).then(d => {
       if (!d || ends[which]?.marker !== marker) return;
-      const rough = acc && acc > 60 ? ` ±${Math.round(acc)} m` : '';
+      const rough = acc && acc > CFG.roughFixM ? ` ±${Math.round(acc)} m` : '';
       ends[which].label = mine ? `My location (${d.label}${rough})` : d.label;
       input(which).value = ends[which].label;
       summaryHeader(); syncUrl();
@@ -301,10 +409,10 @@ function locate({ quiet = false } = {}) {
   };
   id = navigator.geolocation.watchPosition(pos => {
     if (!best || pos.coords.accuracy < best.accuracy) best = pos.coords;
-    if (best.accuracy <= 25) finish();
+    if (best.accuracy <= CFG.locateGoodM) finish();
   }, err => { if (!quiet) hint(err.code === 1 ? 'Location permission denied.' : 'Could not get your location.'); done = true; },
      { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 });
-  setTimeout(finish, 6000);
+  setTimeout(finish, CFG.locateMaxS * 1000);
 }
 $('locBtn').onclick = () => locate();
 // phones: if location permission was already granted, start from "My location"
@@ -345,10 +453,10 @@ for (const which of ['from', 'to']) {
     if (q.length < 2) { hideSug(); return; }
     const seq = ++sugSeq;
     sugTimer = setTimeout(async () => {
-      const r = await fetch('geocode?limit=6&q=' + encodeURIComponent(q));
+      const r = await fetch(`geocode?limit=${CFG.suggestLimit}&q=` + encodeURIComponent(q));
       const d = r.ok ? await r.json() : { results: [] };
       if (seq === sugSeq && document.activeElement === el) showSug(which, d.results);
-    }, 150);
+    }, CFG.suggestDelayMs);
   });
   el.addEventListener('keydown', e => {
     if (sug.hidden || sugFor !== which) return;
@@ -437,6 +545,7 @@ async function route(fit = true, { quiet = false } = {}) {
   $('simIgnoreBtn').disabled = same;
   if (same) $('simIgnoreBtn').title = 'Both routes are the same on this trip: nothing to ignore.';
   summaryHeader(); updatePeek(); syncUrl();
+  if (!quiet) refreshReports();
   return d;
 }
 
@@ -480,9 +589,9 @@ function spokenDistance(m) {
   return mi < 0.35 ? 'a quarter mile' : mi < 0.65 ? 'half a mile' : `${mi.toFixed(1)} miles`;
 }
 function voiceForArea(h, dist) {
-  if (!h || (h.tier !== 'high' && h.tier !== 'medium')) return;
+  if (!h || !CFG.voiceTiers.includes(h.tier)) return;
   const storms = `Flooded in ${h.storm_events} storm${h.storm_events === 1 ? '' : 's'}.`;
-  if (dist > 0 && dist <= 400 && !announced.has(h.id + ':ahead')) {
+  if (dist > 0 && dist <= CFG.voiceAheadM && !announced.has(h.id + ':ahead')) {
     announced.add(h.id + ':ahead');
     say(`${h.tier === 'high' ? 'High' : 'Medium'} flood-risk area ahead in ${spokenDistance(dist)}. ${storms}`);
   } else if (dist <= 0 && !announced.has(h.id + ':in')) {
@@ -493,7 +602,8 @@ function voiceForArea(h, dist) {
 
 // ================= drive mode =================
 let trail = null;  // where the car has actually been during a drive or simulation
-let meMarker = null, meCircle = null, followMe = true, lastRerouteAt = 0, rerouting = false, simSpeed = 8, reroutes = 0;
+let meMarker = null, meCircle = null, followMe = true, lastRerouteAt = 0, rerouting = false, simSpeed = CFG.simSpeeds[1], reroutes = 0;
+let simPath = null, simDist = 0, lastPos = null;
 
 const R = 6371000, rad = Math.PI / 180;
 function metres(a, b) { const x = (b.lng - a.lng) * rad * Math.cos((a.lat + b.lat) / 2 * rad), y = (b.lat - a.lat) * rad; return Math.hypot(x, y) * R; }
@@ -547,15 +657,16 @@ function startDrive(mode) {
   keepAwake();
   lines.forEach((l, i) => l.setStyle(i === 0 ? { opacity: 0.35 } : { weight: 6 }));
   if (simulate) {
-    // the simulated car's path is fixed at the start; re-routing only changes the advice
-    const coords = lastRoute[mode === 'ignore' ? 'baseline' : 'flood_aware'].geometry.coordinates.map(c => [c[1], c[0]]);
-    let dist = 0;
+    // 'ignore': the car keeps to the original direct route whatever the advice says;
+    // 'follow': the car switches to each new blue route (see onPosition after a re-route)
+    simPath = lastRoute[mode === 'ignore' ? 'baseline' : 'flood_aware'].geometry.coordinates.map(c => [c[1], c[0]]);
+    simDist = 0;
     const step = () => {
       if (!driving) return;
-      dist += 13.4 * simSpeed * 0.5;  // ~30 mph, sped up
-      const p = pointAt(coords, dist);
+      simDist += CFG.simSpeedMps * simSpeed * CFG.simStepS;
+      const p = pointAt(simPath, simDist);
       onPosition({ lat: p.lat, lng: p.lng, accuracy: 8 });
-      simTimer = setTimeout(step, 500);
+      simTimer = setTimeout(step, CFG.simStepS * 1000);
     };
     step();
   } else if (navigator.geolocation) {
@@ -580,13 +691,15 @@ function stopDrive() {
   lines.forEach((l, i) => l.setStyle(i === 0 ? { opacity: 0.8 } : { weight: 4 }));
 }
 $('stopDrive').onclick = stopDrive;
-$('simSpeed').onclick = () => { simSpeed = simSpeed === 8 ? 16 : simSpeed === 16 ? 4 : 8; $('simSpeed').textContent = simSpeed + '×'; };
+$('simSpeed').onclick = () => { const v = CFG.simSpeeds; simSpeed = v[(v.indexOf(simSpeed) + 1) % v.length]; $('simSpeed').textContent = simSpeed + '×'; };
 map.on('dragstart', () => { if (driving) { followMe = false; document.body.classList.add('panned'); } });
 $('recenter').onclick = () => { followMe = true; document.body.classList.remove('panned'); if (meMarker) map.setView(meMarker.getLatLng(), 16); };
 
+let forceReroute = false;
 async function onPosition(p) {
   if (!driving || !lastRoute) return;
   const here = L.latLng(p.lat, p.lng);
+  lastPos = p;
   if (!trail) trail = L.polyline([], { color: '#111827', weight: 3, opacity: 0.8, dashArray: '2 7', interactive: false }).addTo(map);
   trail.addLatLng(here);
   if (!meMarker) {
@@ -605,7 +718,7 @@ async function onPosition(p) {
   const tLeft = lastRoute.flood_aware.time_s * (pr.total ? left / pr.total : 0);
   $('driveEta').textContent = (sim === 'ignore' ? 'Advice: ' : '') + `${mins(tLeft)} · ${km(left)}`;
 
-  if (metres(here, L.latLng(ends.to.lat, ends.to.lng)) < 40 || left < 30) {
+  if (metres(here, L.latLng(ends.to.lat, ends.to.lng)) < CFG.arriveM || left < 30) {
     say('You have arrived.'); stopDrive(); hint('Arrived.'); return;
   }
   // warn about the road actually being driven: the direct route when ignoring advice
@@ -615,8 +728,17 @@ async function onPosition(p) {
   const ahead = (lastRoute[driven].hotspots_crossed || [])
     .filter(h => h.along_m != null && h.along_m + h.meters_inside > prd.along)
     .sort((a, b) => a.along_m - b.along_m)[0];
+  const drivenCoords = lastRoute[driven].geometry.coordinates.map(c => [c[1], c[0]]);
+  const liveAhead = liveSpots.map(sp => ({ sp, pr: project(L.latLng(sp.lat, sp.lon), drivenCoords) }))
+    .filter(x => x.pr.off <= CFG.liveNearRouteM && x.pr.along > prd.along - 30)
+    .sort((a, b) => a.pr.along - b.pr.along)[0];
+  if (liveAhead) {
+    const dist = liveAhead.pr.along - prd.along, key = `live:${liveAhead.sp.lat.toFixed(4)},${liveAhead.sp.lon.toFixed(4)}`;
+    const what = ['closed', 'impassable'].includes(liveAhead.sp.state) ? 'Road reported impassable' : 'Water reported on the road';
+    if (dist <= CFG.voiceAheadM && !announced.has(key)) { announced.add(key); say(`${what} ahead${dist > 50 ? ' in ' + spokenDistance(dist) : ''}.`); }
+  }
   const nextMajor = (lastRoute[driven].hotspots_crossed || [])
-    .filter(h => (h.tier === 'high' || h.tier === 'medium') && h.along_m != null && h.along_m + h.meters_inside > prd.along)
+    .filter(h => CFG.voiceTiers.includes(h.tier) && h.along_m != null && h.along_m + h.meters_inside > prd.along)
     .sort((a, b) => a.along_m - b.along_m)[0];
   if (nextMajor) voiceForArea(nextMajor, nextMajor.along_m - prd.along);
   $('driveNext').innerHTML = ahead
@@ -624,18 +746,30 @@ async function onPosition(p) {
         ? `<span class="tier ${ahead.tier}">${ahead.tier}</span> In a flood-history area now (${ahead.storm_events} storm${ahead.storm_events === 1 ? '' : 's'})`
         : `<span class="tier ${ahead.tier}">${ahead.tier}</span> Flood-history area in ${km(ahead.along_m - prd.along)} (${ahead.storm_events} storm${ahead.storm_events === 1 ? '' : 's'})`)
     : 'No flood-history areas left on this route.';
+  if (liveAhead && liveAhead.pr.along - prd.along <= 2000) {
+    const st = liveAhead.sp.state, d = Math.max(0, liveAhead.pr.along - prd.along);
+    $('driveNext').innerHTML = `<span class="live ${st}">${liveLabel[st]}</span> reported ${d < 50 ? 'here' : 'in ' + km(d)} ` +
+      `<span class="muted">(${liveAhead.sp.devices} device${liveAhead.sp.devices === 1 ? '' : 's'}, ${liveAhead.sp.age_min} min ago)</span><br>` + $('driveNext').innerHTML;
+  }
 
   // re-route from here when off the route (at most every 5 s, 3 s in simulation),
   // and every 20 s on a real drive (live data can change the best route)
   const now = Date.now();
-  const off = (!sim || sim === 'ignore') && pr.off > 50 && p.accuracy < 60;
+  const off = (!sim || sim === 'ignore') && pr.off > CFG.offRouteM && p.accuracy < CFG.offRouteMaxAccuracyM;
   const gap = now - lastRerouteAt;
-  if (!rerouting && ((off && gap > (sim ? 3000 : 5000)) || (!sim && gap > 20000))) {
+  if (forceReroute || (!rerouting && ((off && gap > (sim ? CFG.rerouteMinGapSimS : CFG.rerouteMinGapS) * 1000)
+                                      || gap > CFG.rerouteEveryS * 1000))) {
+    forceReroute = false;
     rerouting = true; lastRerouteAt = now;
     if (ends.from?.marker) ends.from.marker.setLatLng(here);
     ends.from = { lat: here.lat, lng: here.lng, label: 'My location', marker: ends.from?.marker, mine: true };
     input('from').value = 'My location';
+    const before = lastRoute;
     const d = await route(false, { quiet: true });
+    refreshReports();
+    if (d && sim === 'follow' && d !== before) {  // the simulated car takes the new advice
+      simPath = d.flood_aware.geometry.coordinates.map(c => [c[1], c[0]]); simDist = 0;
+    }
     if (d && off) {
       reroutes++;
       say('Route updated.');
