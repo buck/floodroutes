@@ -55,7 +55,8 @@ in
       Type = "simple";
       User = "floodroutes";
       WorkingDirectory = root;
-      ExecStart = "${apiPython}/bin/uvicorn api.app:app --host 127.0.0.1 --port 8086 --proxy-headers";
+      # 4 worker processes: one Python process only uses one core (~20 routes/s on gitano)
+      ExecStart = "${apiPython}/bin/uvicorn api.app:app --host 127.0.0.1 --port 8086 --proxy-headers --workers 4";
       Restart = "on-failure";
       RestartSec = "5s";
     };

@@ -24,7 +24,7 @@ from pathlib import Path
 
 import httpx
 from fastapi import Body, FastAPI, HTTPException, Query
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from pyproj import Transformer
 from shapely.geometry import LineString, Point, shape
 from shapely.ops import transform
@@ -81,8 +81,10 @@ class RiskIndex:
     def _load(self):
         fc = json.loads(RISK.read_text())
         self.raw = fc
-        self.feats = [(f["id"], f["properties"], shape(f["geometry"])) for f in fc["features"]]
-        self.tree = STRtree([g for _, _, g in self.feats])
+        # project every polygon to feet once here, not on every request
+        self.feats = [(f["id"], f["properties"], g, transform(to_ft, g))
+                      for f in fc["features"] for g in [shape(f["geometry"])]]
+        self.tree = STRtree([g for _, _, g, _ in self.feats])
         self.mtime = RISK.stat().st_mtime
 
     def fresh(self):
@@ -94,8 +96,8 @@ class RiskIndex:
         line_ft = transform(to_ft, line)
         out = []
         for i in self.tree.query(line, predicate="intersects"):
-            fid, props, geom = self.feats[i]
-            inside = transform(to_ft, geom).intersection(line_ft)
+            fid, props, _, geom_ft = self.feats[i]
+            inside = geom_ft.intersection(line_ft)
             inside_m = inside.length * 0.3048006096
             parts = getattr(inside, "geoms", [inside])
             starts = [line_ft.project(Point(g.coords[0])) for g in parts if not g.is_empty and len(g.coords)]
@@ -199,9 +201,14 @@ async def compare(a, b, areas=None):
     }
 
 
+def fast_json(obj) -> Response:
+    """Serialize with json.dumps directly; FastAPI's jsonable_encoder costs ~12 ms per route."""
+    return Response(json.dumps(obj, separators=(",", ":")), media_type="application/json")
+
+
 @app.get("/route")
 async def route_get(from_: str = Query(..., alias="from"), to: str = Query(...)):
-    return await compare(parse_point(from_), parse_point(to))
+    return fast_json(await compare(parse_point(from_), parse_point(to)))
 
 
 @app.post("/route")
@@ -211,7 +218,7 @@ async def route_post(body: dict = Body(...)):
         b = check_point(float(body["to"][0]), float(body["to"][1]))
     except (KeyError, TypeError, ValueError, IndexError):
         raise HTTPException(422, "body needs 'from' and 'to' as [lat, lon]")
-    return await compare(a, b, body.get("areas"))
+    return fast_json(await compare(a, b, body.get("areas")))
 
 
 @app.get("/risk.geojson")
