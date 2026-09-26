@@ -69,8 +69,13 @@ class Geocoder:
             return []
         zm = re.search(r"\b(77\d{3}|78\d{3})\b", q)
         zip_ = zm.group(1) if zm else None
-        q = re.sub(r",?\s*(houston|tx|texas|usa)\b", " ", q, flags=re.I)
-        q = re.sub(r"\b(77\d{3}|78\d{3})\b", " ", q).strip(" ,")
+        q = re.sub(r"\b(77\d{3}|78\d{3})(-\d{4})?\b", " ", q).strip(" ,")
+        # drop a trailing ", Houston, TX" (but keep names like "Houston Heights")
+        while True:
+            q2 = re.sub(r"(,\s*|\s+)(houston|tx|texas|usa)\s*$", "", q, flags=re.I).strip(" ,")
+            if q2 == q or not q2:
+                break
+            q = q2
         parts = re.split(r"\s*(?:&|@|\band\b|\bat\b)\s*", q, flags=re.I)
         if len(parts) == 2 and all(parts) and not re.match(r"^\d", parts[0]):
             hit = self.intersection(parts[0], parts[1])
@@ -114,11 +119,15 @@ class Geocoder:
         fts = self._fts(norm_street(q))
         if not fts:
             return []
-        places = [{"label": name, "lat": lat, "lon": lon, "kind": "place",
-                   "detail": kind.split("=")[1].replace("_", " ")}
-                  for name, kind, lat, lon in self.db.execute(
-                      "SELECT p.name, p.kind, p.lat, p.lon FROM poi_fts f JOIN poi p ON p.id = f.rowid "
-                      "WHERE poi_fts MATCH ? ORDER BY p.rank, bm25(poi_fts) LIMIT ?", (self._fts(q), limit))]
+        # an exact name match first, then names starting with the query, then the rest
+        ql = re.sub(r"\s+", " ", q.lower()).strip()
+        cand = self.db.execute(
+            "SELECT p.name, p.kind, p.lat, p.lon, p.rank FROM poi_fts f JOIN poi p ON p.id = f.rowid "
+            "WHERE poi_fts MATCH ? ORDER BY p.rank, bm25(poi_fts) LIMIT 60", (self._fts(q),)).fetchall()
+        order = {id(c): i for i, c in enumerate(cand)}
+        cand.sort(key=lambda c: (0 if c[0].lower() == ql else 1 if c[0].lower().startswith(ql) else 2, c[4], order[id(c)]))
+        places = [{"label": name, "lat": lat, "lon": lon, "kind": "place", "detail": kind.split("=")[1].replace("_", " ")}
+                  for name, kind, lat, lon, _ in cand[:limit]]
         streets, per_name = [], {}
         for full, z, lat, lon in self.db.execute(
                 "SELECT s.fullname, s.zip, s.lat, s.lon FROM streets_fts f JOIN streets s ON s.id = f.rowid "
@@ -132,7 +141,9 @@ class Geocoder:
         if re.search(r"\b(st|ave|blvd|dr|rd|ln|pkwy|fwy|hwy|ct|cir|pl|trl|way)\.?$", q, re.I):
             out = streets + places          # looks like a street
         else:
-            out = places[:2] + streets + places[2:]
+            exact = [p for p in places if p["label"].lower() == ql]
+            out = (exact + [p for p in places[:2] if p not in exact] + streets
+                   + [p for p in places[2:] if p not in exact])
         return out[:limit]
 
     def intersection(self, a: str, b: str):
