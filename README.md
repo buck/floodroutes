@@ -8,7 +8,7 @@ For each trip it returns two routes side by side:
 
 The flood data only lowers priority; it never removes a road.
 
-**Map page:** http://127.0.0.1:8086/ (quad, localhost only). Layers: routing risk areas, smoothed risk surface, bayous. Deep links: `/?from=lat,lon&to=lat,lon`, `view=lat,lon,zoom`, `surface=1`.
+**Map page:** https://floodroutes.nbolt.com/ (login required); also http://127.0.0.1:8086/ on quad. Layers: routing risk areas, smoothed risk surface, bayous. Deep links: `/?from=lat,lon&to=lat,lon`, `view=lat,lon,zoom`, `surface=1`.
 
 > *Avoids streets with a history of flooding. Absence of reports does not mean a street is dry. Turn around, don't drown.*
 
@@ -62,6 +62,22 @@ Each makes detours longer and more frequent. How much delay drivers will accept 
 | 5 Routing | `graphhopper/config.yml`, `write_custom_model.py`, `plugin/` (flood_risk encoded value), `rebuild.sh` | GraphHopper on :8989 |
 | 6 API + map | `api/app.py`, `web/index.html`, `tests/` | :8086 |
 | Validation | `validate/validate.py` | `docs/validation.md`, `docs/validation/*.png` |
+
+## Public front end: https://floodroutes.nbolt.com (gitano)
+
+Map and routing are served from **gitano** (NixOS VPS, 4 cores, 8 GB), behind **basic auth**:
+- the username and password are in quad's `.env` (`FLOODROUTES_WEB_USER`, `FLOODROUTES_WEB_PASSWORD`; gitignored);
+- the server holds only the hash (`/var/lib/floodroutes/htpasswd`).
+
+The data pipeline stays on quad (Postgres, 311 refresh, classification, geocoding, graph import).
+
+- **NixOS:** `deploy/gitano/floodroutes.nix` is copied to `/etc/nixos/floodroutes.nix` on gitano and imported from `configuration.nix` (gitano's `/etc/nixos` is a local git repo). It defines:
+  - GraphHopper (`-Xmx2g`) and the API, both bound to localhost;
+  - nginx with Let's Encrypt and basic auth;
+  - firewall ports 80/443.
+- **Deploy:** `deploy/gitano/deploy.sh` rsyncs only built artifacts to `/srv/floodroutes`: the graph, the risk / firefighter / bayou GeoJSON, the surface overlay, the web page and the API code. The graph arrives beside the live one and is swapped in, so routing is down for only a few seconds. The script also rewrites the auth file from `.env`. `graphhopper/rebuild.sh` runs it at the end (`DEPLOY=0` skips).
+- **DNS:** `floodroutes CNAME gitano` in the nbolt.com zone (primary on remate's bind container; secondaries palmas, afraid.org, dollardns).
+- **HTTPS:** phone browsers can use the page and (later) its location features.
 
 ## Setup (quad)
 

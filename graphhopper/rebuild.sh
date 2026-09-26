@@ -49,4 +49,9 @@ if $managed; then
   for i in $(seq 60); do curl -sf http://127.0.0.1:8989/health >/dev/null && break; sleep 2; done
   sudo systemctl restart floodroutes-api.service || true
 fi
+# Publish to the public front end (gitano). DEPLOY=0 skips; a failure here keeps quad's build.
+if [ "${DEPLOY:-1}" = 1 ] && [ -x deploy/gitano/deploy.sh ]; then
+  echo "== $(date -Is) deploy to gitano"
+  deploy/gitano/deploy.sh || echo "   deploy to gitano FAILED; run deploy/gitano/deploy.sh by hand"
+fi
 echo "== $(date -Is) done"
