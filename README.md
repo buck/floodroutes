@@ -12,6 +12,33 @@ The flood data only lowers priority; it never removes a road.
 
 > *Avoids streets with a history of flooding. Absence of reports does not mean a street is dry. Turn around, don't drown.*
 
+## How the flood-aware route decides
+
+**Headline: avoiding Houston's flood history costs about half a minute on a typical trip.** Over 200 random city trips:
+- median +27–31 s (+2–3%), with 90% under about +2 minutes and none more than 50% longer;
+- about 80% of the trips whose normal route crosses a high-risk area avoid high-risk areas entirely on the flood-aware route.
+
+**Why detours are small**
+1. **Hotspots are small and the street grid is dense.** A high-risk hex is ~130 m across and 0.7% of the city is high risk. There is almost always a parallel street a block away, so going around usually costs tens of metres and tens of seconds.
+2. **The router adds only as much time as it must.** Inside a risk tier, a road segment's *priority* is multiplied by 0.05 (high), 0.25 (medium) or 0.6 (low). A high-risk segment therefore "costs" 20× its normal value: a 100 m flooded stretch weighs as much as ~2 km of ordinary road. The router takes any detour cheaper than that, choosing the one that adds the least time.
+3. **Reported times are honest dry-road times.** The penalty changes which roads are *chosen*, never the speed assumed on them. "+23 s" is what the detour costs on a normal day. On a flood day the direct route may be crawling or impassable, so the real benefit is larger.
+4. **History never closes a road.** If the only way across is, say, a bayou bridge with the next crossing 2 km away, the router accepts the hotspot rather than send the driver on a long detour. Two of the six validation hotspot trips behave this way, by design (`docs/validation.md`). Closing roads is the job of live data (`POST /route` `areas`: gauges, TranStar sensors), which are hard exclusions.
+
+**How it's built**
+- **Profiles:** each profile is a stack of GraphHopper "custom models".
+  - `car` is GraphHopper's built-in `car.json`: roads a car may not use get priority 0; speed is each segment's average car speed derived from OSM tags at import; and `distance_influence: 90` adds 90 s of cost per km, so near-ties go to the shorter route. That is why a few detours show *negative* added time with positive added distance.
+  - `car_flood` is `car.json` plus `flood_risk.json`: three rules on the per-segment `flood_risk` value (0–3), which the import plugin stores by testing each segment's geometry against the risk-tier polygons.
+- **Speed-ups:** two precomputations, each suited to one profile.
+  - **CH (Contraction Hierarchies)** ranks junctions by importance and adds ~900k shortcut edges, so a `car` query touches a few hundred junctions (~4 ms). But the costs are baked into the shortcuts, so CH can't serve a profile whose costs change per request.
+  - **LM (Landmarks)** precomputes costs to and from 16 landmark points and uses them as lower bounds to steer an A* search (~16 ms for `car_flood`). The bounds stay valid whenever costs only go *up*, as flood penalties and live exclusions do. So `car_flood` reuses `car`'s landmarks and accepts per-request live areas; those requests must send `ch.disable=true` (the API does).
+
+**Tuning: a policy choice, not a technical one.** For a more cautious flood route, change `risk/config.yaml` and run `graphhopper/rebuild.sh`:
+- stronger multipliers (e.g. high 0.01 = ×100);
+- a lower `thresholds.low` (more of the city counts as risky);
+- extending risk along whole street segments rather than just the reported blocks.
+
+Each makes detours longer and more frequent. How much delay drivers will accept for how much avoided risk is best set with city staff.
+
 ## Pipeline
 
 ```
