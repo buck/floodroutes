@@ -67,3 +67,101 @@ def test_risk_geojson_has_no_case_data():
     fc = client.get("/risk.geojson").json()
     assert fc["features"]
     assert not FORBIDDEN_KEYS & set(keys(fc))
+
+
+# --- layers added after the first test round -------------------------------------------
+
+HOUSTON = (-96.2, 29.2, -94.7, 30.4)  # routing bbox: lon0, lat0, lon1, lat1
+HFD_PROPS = {"id", "station", "kind", "severity", "quote", "length_m"}
+
+
+def coords(g):
+    """All [lon, lat] pairs of a GeoJSON geometry, at any nesting depth."""
+    def walk(c):
+        if isinstance(c[0], (int, float)):
+            yield c
+        else:
+            for part in c:
+                yield from walk(part)
+    return list(walk(g["coordinates"]))
+
+
+def in_houston(lon, lat):
+    return HOUSTON[0] <= lon <= HOUSTON[2] and HOUSTON[1] <= lat <= HOUSTON[3]
+
+
+def test_hfd_geojson_is_published_report_fields_only():
+    r = client.get("/hfd.geojson")
+    assert r.status_code == 200
+    fc = r.json()
+    assert "Measuring Flooding with the Houston Fire Department" in fc.get("source", "")
+    assert fc["features"]
+    for f in fc["features"]:
+        assert set(f["properties"]) <= HFD_PROPS, f["properties"].keys()
+        assert f["properties"]["severity"] in {"cut_off", "recurring", "major_event"}
+        assert f["properties"]["kind"] in {"intersection", "segment", "station_front"}
+        assert f["geometry"]["type"] in {"Point", "LineString", "MultiLineString"}
+        assert all(in_houston(lon, lat) for lon, lat in coords(f["geometry"]))
+
+
+def test_risk_areas_reference_real_firefighter_reports():
+    hfd_ids = {f["properties"]["id"] for f in client.get("/hfd.geojson").json()["features"]}
+    refs = [ref for f in client.get("/risk.geojson").json()["features"]
+            for ref in f["properties"].get("firefighter_reports", [])]
+    assert refs, "no risk area carries a firefighter report"
+    assert set(refs) <= hfd_ids
+
+
+def test_risk_surface_overlay():
+    meta = client.get("/risk_surface.json")
+    assert meta.status_code == 200
+    m = meta.json()
+    (lat0, lon0), (lat1, lon1) = m["bounds"]
+    assert lat0 < lat1 and lon0 < lon1
+    assert in_houston(lon0, lat0) and in_houston(lon1, lat1)
+    assert m["generated"]
+    png = client.get("/risk_surface.png")
+    assert png.status_code == 200 and png.headers["content-type"] == "image/png"
+    body = png.content
+    assert body[:8] == b"\x89PNG\r\n\x1a\n"
+    width, height = int.from_bytes(body[16:20], "big"), int.from_bytes(body[20:24], "big")
+    assert width > 500 and height > 500
+
+
+def test_bayous_geojson():
+    r = client.get("/bayous.geojson")
+    assert r.status_code == 200
+    feats = r.json()["features"]
+    names = {f["properties"]["name"] for f in feats}
+    assert {"Brays Bayou", "Buffalo Bayou", "White Oak Bayou"} <= names
+    for f in feats:
+        assert set(f["properties"]) == {"name"}
+        assert f["geometry"]["type"] == "LineString"
+
+
+def test_map_page():
+    r = client.get("/")
+    assert r.status_code == 200 and "text/html" in r.headers["content-type"]
+    html = r.text
+    assert ("Avoids streets with a history of flooding. Absence of reports does not mean a street is dry. "
+            "Turn around, don't drown.") in html
+    for endpoint in ("route?", "risk.geojson", "risk_surface.json", "bayous.geojson", "hfd.geojson"):
+        assert endpoint in html, endpoint
+    # third-party code only from the allowed CDN
+    for src in __import__("re").findall(r'<script[^>]+src="([^"]+)"', html):
+        assert src.startswith("https://cdnjs.cloudflare.com/"), src
+
+
+def test_health():
+    r = client.get("/health")
+    assert r.status_code == 200
+    d = r.json()
+    assert d["api"] == "ok" and d["graphhopper"] == "OK" and d["risk_polygons"] > 0
+
+
+def test_api_source_never_touches_resident_text():
+    """Static guard: the API must not read 311 free-text columns or the case tables at all."""
+    src = (Path(__file__).resolve().parent.parent / "api" / "app.py").read_text()
+    for forbidden in ("description", "latest_notes", "resolution_notes", "conflict_notes",
+                      "service_request", "flood_signal", "incident_address", "psycopg"):
+        assert forbidden not in src, forbidden

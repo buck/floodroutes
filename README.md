@@ -154,7 +154,11 @@ The GraphHopper 11.0 settings:
 - `GET /bayous.geojson`: major bayou channels from OSM.
 - `GET /health`
 
-Tests: `python -m pytest tests/ -q`. They need GraphHopper running, and they check that no case numbers or text keys appear in any response.
+Tests: `python -m pytest tests/ -q` (12 tests; they need GraphHopper running).
+- **Routing:** response shape; the flood route never has more high-risk exposure than the direct one; live areas are hard exclusions that leave the direct route alone; the fixture file works; out-of-area points get a 422.
+- **Layers:** `/risk.geojson`, `/hfd.geojson` (only published-report fields, valid severities, all inside Houston), `/risk_surface.png` and `.json` (a real PNG with sane bounds), `/bayous.geojson`, and the map page (banner text present, scripts only from cdnjs).
+- **Consistency:** every firefighter report a risk area cites exists in `/hfd.geojson`; `/health` reports both services up.
+- **Privacy:** no response contains case-number, address, title, description or notes fields; and a source guard fails if `api/app.py` ever mentions the 311 tables, their free-text columns, or a database driver. The API only ever reads the aggregate GeoJSON files.
 
 ## Privacy
 
