@@ -289,4 +289,6 @@ Computed by `risk/coverage_stats.py` (2026-09-25). City limits (1,588 km²) and 
   - Low-downtime rebuild: import the new graph while the old one keeps serving, then restart (~10 s gap instead of ~90 s).
   - Live gauge feed: HCFCD gauges plus a table of road segments by flood stage (e.g. North/South Braeswood when Brays Bayou leaves its banks), sent as live `areas`. Bayou-side roads have few front doors, so 311 under-reports them.
   - TranStar roadway flood warning sensors (underpasses) as live `areas`.
+  - **Heading-up driver view:** during a drive the map already follows the car at street level, but stays north-up. Rotate it so forward is up, using GPS heading while moving or the route direction otherwise, with a north-up toggle. Options: the `leaflet-rotate` plugin (small change), or MapLibre GL (native rotation and tilt), done together with self-hosted vector tiles.
+  - Voice reporting ("report flooding") so drivers don't need to touch the phone.
 - **Out of scope (hooks left):** live TranStar high water, NWS storm reports, HCFCD gauges and rainfall, USGS high-water marks (`POST /route` `areas`); OsmAnd/GPX export; public deployment.
