@@ -5,6 +5,8 @@ POST /route  {"from": [lat, lon], "to": [lat, lon], "areas": <GeoJSON FeatureCol
      `areas` are hard exclusions applied to the flood-aware route only (hook
      for live high-water reports; no live sources are wired up yet).
 GET  /risk.geojson   the risk-tier polygons (tier and aggregate counts only)
+GET  /risk_surface.png, /risk_surface.json   smoothed risk-surface overlay + bounds
+GET  /bayous.geojson  major bayou channels (OSM)
 GET  /               the map page
 
 Responses carry geometry, distances, times and risk-polygon aggregates only:
@@ -27,6 +29,9 @@ from shapely.strtree import STRtree
 
 ROOT = Path(__file__).resolve().parent.parent
 RISK = ROOT / "risk" / "flood_risk_tiers.geojson"
+SURFACE_PNG = ROOT / "risk" / "risk_surface_overlay.png"
+SURFACE_META = ROOT / "risk" / "risk_surface_overlay.json"
+BAYOUS = ROOT / "data" / "osm" / "bayous.geojson"
 WEB = ROOT / "web" / "index.html"
 GH = os.getenv("GRAPHHOPPER_URL", "http://127.0.0.1:8989")
 BBOX = (-96.2, 29.2, -94.7, 30.4)  # graph extent
@@ -203,6 +208,27 @@ async def route_post(body: dict = Body(...)):
 @app.get("/risk.geojson")
 def risk_geojson():
     return JSONResponse(risk.fresh().raw, headers={"Cache-Control": "max-age=300"})
+
+
+@app.get("/risk_surface.png")
+def risk_surface_png():
+    if not SURFACE_PNG.exists():
+        raise HTTPException(404, "run risk/surface_overlay.py")
+    return FileResponse(SURFACE_PNG, media_type="image/png", headers={"Cache-Control": "max-age=300"})
+
+
+@app.get("/risk_surface.json")
+def risk_surface_meta():
+    if not SURFACE_META.exists():
+        raise HTTPException(404, "run risk/surface_overlay.py")
+    return JSONResponse(json.loads(SURFACE_META.read_text()), headers={"Cache-Control": "max-age=300"})
+
+
+@app.get("/bayous.geojson")
+def bayous():
+    if not BAYOUS.exists():
+        raise HTTPException(404, "run risk/surface_overlay.py")
+    return JSONResponse(json.loads(BAYOUS.read_text()), headers={"Cache-Control": "max-age=3600"})
 
 
 @app.get("/health")

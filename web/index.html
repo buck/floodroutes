@@ -48,12 +48,18 @@
   <h1>Houston flood-aware routing</h1>
   <div class="muted" id="hint">Click the map to set a start, then an end.</div>
   <div style="margin:8px 0">
-    <label><input type="checkbox" id="riskToggle" checked> Flood-history risk areas</label>
     <button id="reset" style="float:right">Reset</button>
+    <label><input type="checkbox" id="riskToggle" checked> Risk areas (routing tiers)</label><br>
+    <label><input type="checkbox" id="surfaceToggle"> Risk surface (smoothed)</label><br>
+    <label><input type="checkbox" id="bayouToggle" checked> Bayous</label>
   </div>
   <div class="muted" style="font-size:12px">
     <span class="tier high">high</span> <span class="tier medium">medium</span> <span class="tier low">low</span>
     from Houston 311 reports 2011–2026
+    <div id="surfaceLegend" style="display:none; margin-top:4px">
+      <div style="height:8px; border-radius:3px; background:linear-gradient(90deg, rgba(255,255,204,.5), #fd8d3c, #bd0026)"></div>
+      <div class="row" style="margin:0"><span>few reports</span><span>repeat flooding across storms</span></div>
+    </div>
   </div>
   <div id="result"></div>
 </div>
@@ -79,6 +85,36 @@ document.getElementById('riskToggle').onchange = e => {
   e.target.checked ? riskLayer.addTo(map) : map.removeLayer(riskLayer);
 };
 
+// Smoothed risk surface: a transparent PNG rendered in Web Mercator rows (risk/surface_overlay.py)
+map.createPane('surface'); map.getPane('surface').style.zIndex = 350;  // under the tier outlines
+let surfaceLayer = null;
+fetch('risk_surface.json').then(r => r.ok ? r.json() : null).then(m => {
+  if (!m) { document.getElementById('surfaceToggle').disabled = true; return; }
+  surfaceLayer = L.imageOverlay('risk_surface.png?v=' + encodeURIComponent(m.generated), m.bounds,
+    { pane: 'surface', opacity: 0.85, interactive: false });
+  if (new URLSearchParams(location.search).get('surface') === '1') {
+    const cb = document.getElementById('surfaceToggle'); cb.checked = true; cb.onchange({ target: cb });
+  }
+});
+document.getElementById('surfaceToggle').onchange = e => {
+  if (!surfaceLayer) return;
+  document.getElementById('surfaceLegend').style.display = e.target.checked ? 'block' : 'none';
+  e.target.checked ? surfaceLayer.addTo(map) : map.removeLayer(surfaceLayer);
+};
+
+// Bayous (OSM channels)
+let bayouLayer = null;
+fetch('bayous.geojson').then(r => r.ok ? r.json() : null).then(fc => {
+  if (!fc) { document.getElementById('bayouToggle').disabled = true; return; }
+  bayouLayer = L.geoJSON(fc, { style: { color: '#0369a1', weight: 2.5, opacity: 0.8 }, interactive: true,
+    onEachFeature: (f, l) => l.bindTooltip(f.properties.name, { sticky: true }) });
+  if (document.getElementById('bayouToggle').checked) bayouLayer.addTo(map);
+});
+document.getElementById('bayouToggle').onchange = e => {
+  if (!bayouLayer) return;
+  e.target.checked ? bayouLayer.addTo(map) : map.removeLayer(bayouLayer);
+};
+
 let pts = [], markers = [], lines = [];
 const clear = () => { markers.concat(lines).forEach(l => map.removeLayer(l)); markers = []; lines = []; };
 document.getElementById('reset').onclick = () => {
@@ -94,9 +130,12 @@ map.on('click', e => {
   route();
 });
 
-// Deep link: ?from=lat,lon&to=lat,lon routes on load (used for demos and validation screenshots)
+// Deep links: ?from=lat,lon&to=lat,lon routes on load; ?view=lat,lon,zoom sets the view;
+// ?surface=1 turns on the risk surface (used for demos and screenshots)
 (() => {
   const sp = new URLSearchParams(location.search);
+  const v = (sp.get('view') || '').split(',').map(Number);
+  if (v.length === 3 && v.every(isFinite)) map.setView([v[0], v[1]], v[2]);
   const p = s => { const m = (s || '').split(',').map(Number); return m.length === 2 && m.every(isFinite) ? L.latLng(m[0], m[1]) : null; };
   const a = p(sp.get('from')), b = p(sp.get('to'));
   if (a && b) setTimeout(() => { map.fire('click', { latlng: a }); map.fire('click', { latlng: b }); }, 0);

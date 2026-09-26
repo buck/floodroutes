@@ -12,6 +12,7 @@ UNIT=floodroutes-graphhopper.service
 
 echo "== $(date -Is) risk surface"
 "$PYTHON" risk/build_risk.py
+"$PYTHON" risk/surface_overlay.py
 echo "== $(date -Is) custom model"
 "$PYTHON" graphhopper/write_custom_model.py
 
