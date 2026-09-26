@@ -20,8 +20,8 @@ The flood data only lowers priority; it never removes a road.
                  ──classify.py▶ core.flood_signal (strong/moderate/weak) + core.storm_event
                  ──geocode.py─▶ core.service_request.geom (source point / Census / failed)
                  ──build_risk.py▶ core.risk_hex (H3 res 10) ─▶ core.risk_polygon ─▶ risk/flood_risk_tiers.geojson
-                 ──write_custom_model.py▶ graphhopper/custom_models/flood_risk.json
-                 ──GraphHopper import──▶ graphhopper/graph-cache (car: CH+LM, car_flood: LM)
+                 ──write_custom_model.py▶ graphhopper/custom_models/flood_risk.json (priority rules on flood_risk)
+                 ──FloodImport (graphhopper/plugin)▶ graphhopper/graph-cache (car: CH+LM, car_flood: LM; flood_risk per edge)
                  ──api/app.py (FastAPI)──▶ /route, /risk.geojson, web/index.html
 ```
 
@@ -32,7 +32,7 @@ The flood data only lowers priority; it never removes a road.
 | 2 Classify | `classify/classify.py`, `classify/rules.yaml` | `core.flood_signal`, `docs/classification.md`, `docs/classification_review.md` |
 | 3 Geocode | `geocode/geocode.py`, `geocode/report.py` | `docs/geocode_report.md` |
 | 4 Risk | `risk/build_risk.py`, `risk/config.yaml` | `risk/flood_risk_tiers.geojson`, `core.risk_polygon` |
-| 5 Routing | `graphhopper/config.yml`, `write_custom_model.py`, `rebuild.sh` | GraphHopper on :8989 |
+| 5 Routing | `graphhopper/config.yml`, `write_custom_model.py`, `plugin/` (flood_risk encoded value), `rebuild.sh` | GraphHopper on :8989 |
 | 6 API + map | `api/app.py`, `web/index.html`, `tests/` | :8086 |
 | Validation | `validate/validate.py` | `docs/validation.md`, `docs/validation/*.png` |
 
@@ -66,7 +66,7 @@ The flood data only lowers priority; it never removes a road.
   4. geocode new flood signals.
 
   Every step is idempotent. A failure sends `/usr/local/bin/alert`.
-- **On demand** (`graphhopper/rebuild.sh`): rebuild the risk surface and custom model, then reimport the graph into a fresh directory and swap it in. A failed import keeps the old graph. It stops and starts the GraphHopper service around the swap, so routing is down for about 90 s.
+- **On demand** (`graphhopper/rebuild.sh`): rebuild the risk surface and custom model, compile the import plugin if its sources changed, then reimport the graph through `FloodImport` into a fresh directory and swap it in. Don't use `java -jar … import` directly: the stock importer doesn't know `flood_risk`. A failed import keeps the old graph. It stops and starts the GraphHopper service around the swap, so routing is down for about 90 s.
 
 ## Tunable parameters
 
@@ -103,7 +103,7 @@ The flood data only lowers priority; it never removes a road.
 | `thresholds.low/medium/high` | 10 / 25 / 60 | hex score cut-offs; hexes below `low` are dropped |
 | `simplify_m` | 10 | polygon simplification tolerance |
 | `graphhopper_priority.high/medium/low` | 0.05 / 0.25 / 0.6 | priority multiplier inside each tier |
-| `graphhopper_area_mode` | multipolygon | one area per tier; `polygon` = one area per polygon |
+| `graphhopper_area_mode` | encoded_value | `encoded_value`: tier stored per edge at import (fast); `multipolygon`: one custom-model area per tier checked at query time (~10× slower); `polygon`: one area per polygon |
 
 After changing any of these, run `graphhopper/rebuild.sh`.
 
@@ -111,6 +111,7 @@ After changing any of these, run `graphhopper/rebuild.sh`.
 The GraphHopper 11.0 settings:
 - `car` uses CH and LM; `car_flood` uses LM only, sharing car's landmarks via `preparation_profile: car`. That is valid because flood weights are always ≥ car weights.
 - `car_flood` requests need `ch.disable: true`. The API sets it.
+- `flood_risk` (0 none, 1 low, 2 medium, 3 high) is listed in `graph.encoded_values`. It is set per edge at import by `graphhopper/plugin` (Java: `FloodRiskRegistry`, `FloodRiskParser`, `FloodRiskIndex`, `FloodImport`). The parser tests each edge's own geometry against the tier polygons: the same check custom-model `areas` make at query time, done once. It's a stock `IntEncodedValueImpl`, so the unmodified GraphHopper server loads the graph.
 - Heap is `-Xmx4g`, set in the systemd unit and `GH_HEAP` in `rebuild.sh`.
 
 ## API
@@ -142,11 +143,15 @@ As of 2026-09-25; see the docs for detail.
 - **200 random city trips** (ranges over three runs; the sample shifts while the background geocoder adds points):
   - median +27–31 s (+2–3% time); none more than 50% longer;
   - of the ~130 trips whose normal route crosses a high-risk area, 76–82% avoid high-risk areas entirely on the flood-aware route;
-  - API latency median ~290–360 ms, p99 ~840–910 ms. The p99 is above the 500 ms target on long cross-town trips; see limitations.
+  - API latency (both routes plus overlay, keep-alive client) median ~22 ms, p99 ~82 ms, after moving flood risk into an encoded value (was ~300 / ~850 ms).
 - **Top-10 hotspots:** 6 got a test trip through them and 4 of those are avoided. The two not avoided are by design (no reasonable alternative). The other 4 hotspots sit where short test trips never pass (freeway frontage, cul-de-sacs). See `docs/validation.md`.
 
 ## Known limitations and next steps
 
-- **Latency:** `car_flood` evaluates three MultiPolygon areas per edge at query time, about 15× slower edge weighting than `car`. If long-trip p99 matters, compute a custom encoded value (flood tier per edge) at import instead, and keep `areas` for live per-request exclusions.
+- **Latency (fixed 2026-09-25):**
+  - `car_flood` now reads the per-edge `flood_risk` encoded value instead of evaluating polygons per edge: p99 went from 765 ms to 91 ms in GraphHopper.
+  - The API also shares one HTTP client; a per-request client cost ~200 ms.
+  - On quad, *new* localhost TCP connections sometimes take ~200 ms to connect (seen for both GraphHopper and the API; OpenSnitch's connection interception is the suspect, unconfirmed). Browsers reuse connections, so map users don't see it.
+- **Live exclusions** (`POST /route` `areas`) still use query-time areas. That's fine for a handful of polygons; hundreds would bring the old slowness back.
 - **Moderate tier precision (~50%):** it is dominated by the `Drainage` type, much of which is ditch maintenance. The event-recurrence factor limits the damage, since dry-day maintenance calls don't recur across storms.
 - **Out of scope (hooks left):** live TranStar high water, NWS storm reports, HCFCD gauges and rainfall, USGS high-water marks (`POST /route` `areas`); OsmAnd/GPX export; public deployment.

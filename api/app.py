@@ -14,6 +14,7 @@ import asyncio
 import json
 import os
 import re
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 import httpx
@@ -34,7 +35,30 @@ MAX_LIVE_AREAS = 200
 
 to_ft = Transformer.from_crs("EPSG:4326", "EPSG:2278", always_xy=True).transform
 
-app = FastAPI(title="floodroutes", docs_url="/docs", redoc_url=None)
+# One HTTP client for the app's lifetime: building an httpx client per request
+# costs ~200 ms (it loads an SSL context even for plain http).
+_client: httpx.AsyncClient | None = None
+_client_loop = None
+
+
+def gh_client() -> httpx.AsyncClient:
+    """One client per event loop (in production: one for the app's lifetime)."""
+    global _client, _client_loop
+    loop = asyncio.get_running_loop()
+    if _client is None or _client_loop is not loop:
+        _client = httpx.AsyncClient(timeout=30, limits=httpx.Limits(max_keepalive_connections=20))
+        _client_loop = loop
+    return _client
+
+
+@asynccontextmanager
+async def lifespan(app):
+    yield
+    if _client is not None:
+        await _client.aclose()
+
+
+app = FastAPI(title="floodroutes", docs_url="/docs", redoc_url=None, lifespan=lifespan)
 
 
 class RiskIndex:
@@ -128,9 +152,9 @@ def live_model(areas: dict | None) -> dict | None:
 
 async def compare(a, b, areas=None):
     cm = live_model(areas)
-    async with httpx.AsyncClient(timeout=30) as client:
-        base, flood = await asyncio.gather(gh_route(client, a, b, "car"),
-                                           gh_route(client, a, b, "car_flood", cm))
+    client = gh_client()
+    base, flood = await asyncio.gather(gh_route(client, a, b, "car"),
+                                       gh_route(client, a, b, "car_flood", cm))
     idx = risk.fresh()
     base_line = LineString(base["geometry"]["coordinates"])
     flood_line = LineString(flood["geometry"]["coordinates"])
@@ -183,8 +207,7 @@ def risk_geojson():
 
 @app.get("/health")
 async def health():
-    async with httpx.AsyncClient(timeout=5) as client:
-        gh = (await client.get(f"{GH}/health")).text.strip()
+    gh = (await gh_client().get(f"{GH}/health", timeout=5)).text.strip()
     return {"api": "ok", "graphhopper": gh, "risk_polygons": len(risk.fresh().feats)}
 
 

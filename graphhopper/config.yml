@@ -7,7 +7,7 @@ graphhopper:
   profiles:
     - name: car
       custom_model_files: [car.json]
-    # car plus flood-risk priority areas, written by write_custom_model.py
+    # car plus flood-risk priority rules on flood_risk, written by write_custom_model.py
     - name: car_flood
       custom_model_files: [car.json, flood_risk.json]
 
@@ -23,7 +23,9 @@ graphhopper:
   prepare.lm.landmarks: 16
   prepare.lm.threads: 2
 
-  graph.encoded_values: car_access, car_average_speed, road_access, road_class, road_environment
+  # flood_risk (0-3) is set per edge by graphhopper/plugin at import (FloodImport); the stock
+  # server loads it like any built-in encoded value. Import with rebuild.sh, not `java -jar ... import`.
+  graph.encoded_values: car_access, car_average_speed, road_access, road_class, road_environment, flood_risk
   import.osm.ignored_highways: footway,construction,cycleway,path,steps,pedestrian,bridleway
   routing.snap_preventions_default: tunnel, bridge, ferry
   routing.non_ch.max_waypoint_distance: 1000000

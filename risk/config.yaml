@@ -41,6 +41,8 @@ graphhopper_priority:
   high: 0.05
   medium: 0.25
   low: 0.6
-# 'multipolygon': one area per tier (3 areas, short conditions).
-# 'polygon':      one area per polygon (high_0001 ...), for GH versions without MultiPolygon support.
-graphhopper_area_mode: multipolygon
+# 'encoded_value': flood_risk set per edge at import by graphhopper/plugin (default; car_flood
+#                  p99 91 ms vs 765 ms for 'multipolygon' on 200 city trips, 196/200 identical routes).
+# 'multipolygon':  one custom-model area per tier, evaluated per edge at query time (~10x slower).
+# 'polygon':       one area per polygon (high_0001 ...), for GH versions without MultiPolygon support.
+graphhopper_area_mode: encoded_value

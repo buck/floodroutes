@@ -13,3 +13,5 @@ graphhopper/config.import.yml
 notes
 notes.*
 .*.swp
+graphhopper/plugin/classes/
+graphhopper/plugin/*.jar

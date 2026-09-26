@@ -19,7 +19,17 @@ TIERS = ("high", "medium", "low")
 def main() -> int:
     cfg = yaml.safe_load((ROOT / "risk" / "config.yaml").read_text())
     prio = cfg["graphhopper_priority"]
-    mode = cfg.get("graphhopper_area_mode", "multipolygon")
+    mode = cfg.get("graphhopper_area_mode", "encoded_value")
+    if mode == "encoded_value":
+        # flood_risk (0 none, 1 low, 2 medium, 3 high) is set per edge at import by
+        # graphhopper/plugin (FloodImport); no geometry is evaluated at query time.
+        level = {"high": 3, "medium": 2, "low": 1}
+        stmts = [{("if" if i == 0 else "else_if"): f"flood_risk == {level[t]}", "multiply_by": str(prio[t])}
+                 for i, t in enumerate(TIERS)]
+        OUT.parent.mkdir(parents=True, exist_ok=True)
+        OUT.write_text(json.dumps({"priority": stmts}, indent=1))
+        print(f"wrote {OUT} (encoded_value: flood_risk priority rules, no areas)")
+        return 0
     fc = json.loads(GEOJSON.read_text())
     areas, conds = [], {}
     for tier in TIERS:
