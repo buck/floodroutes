@@ -37,6 +37,10 @@ The brief's default weights (strong 3, moderate 1.5, weak 0.5) look reasonable a
   - 2018-07-04: 6–8 in near I-10 and the 610 Loop, hundreds of stranded motorists.
   - 2024-07-26: overnight tropical rain, 5–7 in around Dickinson and Baytown.
   - All three are now labelled in `known_events`.
-  - Beryl (2024-07-08) is still not detected: 67/day against a threshold of 153, most likely because of the power outage.
+  - Beryl (2024-07-08) is correctly *not* a storm event. An earlier note blamed the power outage; the data says otherwise:
+    - 311 volume held up: 1,543 requests on Jul 8 and 2,200–2,700/day that week, against ~1,800 on a normal weekday.
+    - Tree, debris and Beryl-power requests jumped from ~250/day to ~1,000–1,200/day; traffic-signal requests doubled; Storm Debris Collection led the week with 3,725.
+    - Flooding and Drainage requests stayed at their normal 30–90/day.
+    - Gauges did record 4–8 in area-wide, with 10–15 in swaths (NWS HGX Beryl summary; Yale Climate Connections). But the storm moved quickly and residents experienced it as a wind event; the dominant impact was record outages for CenterPoint.
 - **Privacy:** redaction does not catch personal names or house numbers inside free text ("Constituent <name>", "contact Mrs. <name>"), so the sample file must stay local. Nothing from it is committed.
 - **Title field:** it is only "<type>" or "<type> - <case#> - <address>", so it is excluded from keyword matching.

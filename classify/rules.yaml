@@ -144,7 +144,7 @@ storm_days:
     - {label: 'July 4 2018 flash flood', start: '2018-07-04', end: '2018-07-05'}     # HPM, CNN: 6-8 in near I-10/610
     - {label: 'Imelda', start: '2019-09-18', end: '2019-09-21'}
     - {label: 'May 2021 storm', start: '2021-05-23', end: '2021-05-25'}
-    - {label: 'Beryl', start: '2024-07-07', end: '2024-07-10'}
+    - {label: 'Beryl', start: '2024-07-07', end: '2024-07-10'}   # mostly a wind event in 311; expected not to trigger
     - {label: 'July 26 2024 tropical rain', start: '2024-07-26', end: '2024-07-27'}  # SCW: 5-7 in Dickinson/Baytown
     - {label: 'June 2026 storms', start: '2026-06-01', end: '2026-06-30'}
 

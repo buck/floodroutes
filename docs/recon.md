@@ -71,7 +71,7 @@ Daily drainage+flooding requests have a median of 18/day, a p95 of 69, a p99 of 
 | June 2026 | Jun 5, Jun 15 | 193, 248 |
 | Halloween 2015 | Oct 31 | 368 |
 | Jan 18, 2017 | | 356 |
-| Beryl | Jul 7, 2024 | **only 67**: the power outage suppressed reporting |
+| Beryl | Jul 7, 2024 | **only 67**: residents reported a wind storm, not flooding (see `docs/classification_review.md`) |
 
 **One problem:** two weeks after Harvey (2017-09-05 to 09-21) there are 10 days of 400–1,600 `Flooding` requests with little rain, probably backlogged damage reports. A plain p99 threshold would call them storm days, and they would inflate the recurrence factor. Proposed fixes:
 1. Merge consecutive storm days into **events**, so the recurrence factor counts distinct events rather than days. Harvey then counts once instead of about 20 times.

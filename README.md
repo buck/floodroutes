@@ -136,7 +136,7 @@ Resident free text (names, phone numbers, emails, account numbers) lives only in
 
 As of 2026-09-25; see the docs for detail.
 - **Data:** 5.59M cases → 163,507 flood signals (36.5k strong, 118k moderate, 8.9k weak).
-- **Storm events:** 26 detected. Every named event is caught except Beryl (power outage suppressed reports).
+- **Storm events:** 25 detected (late Imelda reports merged). Every named flood event is caught. Beryl is correctly absent: 311 shows it as a wind storm (tree, debris and signal requests quadrupled; flooding and drainage requests stayed normal).
 - **Geocoding:** 97.7% of flood signals located (target 95%). 3,555 failures have neither a point nor an address, mostly 2011 migration records.
 - **Risk surface:** 4,095 polygons (483 high, 1,158 medium, 2,454 low) covering 107 km².
 - **200 random city trips** (ranges over three runs; the sample shifts while the background geocoder adds points):
