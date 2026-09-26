@@ -31,9 +31,12 @@ The brief's default weights (strong 3, moderate 1.5, weak 0.5) look reasonable a
 - **Option B:** lower moderate to about 1.0.
 
 ## Open items for the user
-- **Storm events to check:**
-  - 2019-09-23..26 is probably late Imelda reports and could be added as a merge window.
-  - 2012-01-09, 2018-07-04 and 2024-07-26 are unlabeled spikes; check them against real storms.
-  - Beryl (2024-07-08) is not detected: 67/day against a threshold of 153, most likely because of the power outage.
+- **Storm events (resolved 2026-09-25):**
+  - 2019-09-23..26 late Imelda reports are merged into the Imelda event (merge window 2019-09-18..30).
+  - 2012-01-09: flash flooding across the metro (Oak Forest / Brickhouse Gully, Richmond Ave stalls).
+  - 2018-07-04: 6–8 in near I-10 and the 610 Loop, hundreds of stranded motorists.
+  - 2024-07-26: overnight tropical rain, 5–7 in around Dickinson and Baytown.
+  - All three are now labelled in `known_events`.
+  - Beryl (2024-07-08) is still not detected: 67/day against a threshold of 153, most likely because of the power outage.
 - **Privacy:** redaction does not catch personal names or house numbers inside free text ("Constituent <name>", "contact Mrs. <name>"), so the sample file must stay local. Nothing from it is committed.
 - **Title field:** it is only "<type>" or "<type> - <case#> - <address>", so it is excluded from keyword matching.
