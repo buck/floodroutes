@@ -8,6 +8,8 @@ GET  /risk.geojson   the risk-tier polygons (tier and aggregate counts only)
 GET  /risk_surface.png, /risk_surface.json   smoothed risk-surface overlay + bounds
 GET  /bayous.geojson  major bayou channels (OSM)
 GET  /hfd.geojson     firefighter-reported flooding locations (2018 HFD survey, published report)
+GET  /geocode?q=     address / place / street / "A & B" search (self-hosted: Census TIGER + OSM)
+GET  /reverse?lat=&lon=  nearest address label for a map point
 GET  /               the map page
 
 Responses carry geometry, distances, times and risk-polygon aggregates only:
@@ -34,6 +36,7 @@ SURFACE_PNG = ROOT / "risk" / "risk_surface_overlay.png"
 SURFACE_META = ROOT / "risk" / "risk_surface_overlay.json"
 BAYOUS = ROOT / "data" / "osm" / "bayous.geojson"
 HFD = ROOT / "risk" / "hfd_locations.geojson"
+GEOCODER_DB = ROOT / "data" / "geocoder.sqlite"
 WEB = ROOT / "web" / "index.html"
 GH = os.getenv("GRAPHHOPPER_URL", "http://127.0.0.1:8989")
 BBOX = (-96.2, 29.2, -94.7, 30.4)  # graph extent
@@ -238,6 +241,30 @@ def hfd():
     if not HFD.exists():
         raise HTTPException(404, "run risk/hfd_locations.py")
     return JSONResponse(json.loads(HFD.read_text()), headers={"Cache-Control": "max-age=300"})
+
+
+_geocoder = None
+
+
+def geocoder():
+    global _geocoder
+    if _geocoder is None:
+        if not GEOCODER_DB.exists():
+            raise HTTPException(503, "address search not built (geocode/build_address_index.py)")
+        from .geocoder import Geocoder
+        _geocoder = Geocoder(GEOCODER_DB)
+    return _geocoder
+
+
+@app.get("/geocode")
+def geocode(q: str = Query(..., min_length=1, max_length=120), limit: int = Query(6, ge=1, le=10)):
+    return {"results": geocoder().search(q, limit)}
+
+
+@app.get("/reverse")
+def reverse(lat: float, lon: float):
+    check_point(lat, lon)
+    return geocoder().reverse(lat, lon)
 
 
 @app.get("/health")

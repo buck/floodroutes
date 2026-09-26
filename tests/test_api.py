@@ -161,7 +161,28 @@ def test_health():
 
 def test_api_source_never_touches_resident_text():
     """Static guard: the API must not read 311 free-text columns or the case tables at all."""
-    src = (Path(__file__).resolve().parent.parent / "api" / "app.py").read_text()
+    api = Path(__file__).resolve().parent.parent / "api"
+    src = "".join((api / f).read_text() for f in ("app.py", "geocoder.py", "addrnorm.py"))
     for forbidden in ("description", "latest_notes", "resolution_notes", "conflict_notes",
                       "service_request", "flood_signal", "incident_address", "psycopg"):
         assert forbidden not in src, forbidden
+
+
+# --- self-hosted address search -------------------------------------------------------
+
+def test_geocode_address_place_intersection():
+    r = client.get("/geocode", params={"q": "4800 n braeswood"})
+    assert r.status_code == 200
+    top = r.json()["results"][0]
+    assert top["label"].startswith("4800 N Braeswood Blvd") and top["kind"] == "address"
+    assert in_houston(top["lon"], top["lat"])
+    places = client.get("/geocode", params={"q": "rice university"}).json()["results"]
+    assert any(p["kind"] == "place" and p["label"] == "Rice University" for p in places)
+    inter = client.get("/geocode", params={"q": "braeswood & stella link"}).json()["results"]
+    assert inter and inter[0]["kind"] == "intersection" and "Stella Link" in inter[0]["label"]
+
+
+def test_reverse_geocode():
+    r = client.get("/reverse", params={"lat": 29.681555, "lon": -95.460975})
+    assert r.status_code == 200 and "Braeswood" in r.json()["label"]
+    assert client.get("/reverse", params={"lat": 40.7, "lon": -74.0}).status_code == 422
