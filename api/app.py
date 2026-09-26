@@ -26,7 +26,7 @@ import httpx
 from fastapi import Body, FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse, JSONResponse
 from pyproj import Transformer
-from shapely.geometry import LineString, shape
+from shapely.geometry import LineString, Point, shape
 from shapely.ops import transform
 from shapely.strtree import STRtree
 
@@ -95,12 +95,16 @@ class RiskIndex:
         out = []
         for i in self.tree.query(line, predicate="intersects"):
             fid, props, geom = self.feats[i]
-            inside_m = transform(to_ft, geom).intersection(line_ft).length * 0.3048006096
+            inside = transform(to_ft, geom).intersection(line_ft)
+            inside_m = inside.length * 0.3048006096
+            parts = getattr(inside, "geoms", [inside])
+            starts = [line_ft.project(Point(g.coords[0])) for g in parts if not g.is_empty and len(g.coords)]
+            along_m = round(min(starts) * 0.3048006096) if starts else None
             out.append({"id": fid, "tier": props["tier"], "score_max": props["score_max"],
                         "storm_events": props["storm_events"], "reports": props["cases"],
                         "first_year": (props.get("first_day") or "")[:4] or None,
                         "last_year": (props.get("last_day") or "")[:4] or None,
-                        "meters_inside": round(inside_m)})
+                        "meters_inside": round(inside_m), "along_m": along_m})
         out.sort(key=lambda d: (TIER_ORDER[d["tier"]], -d["score_max"]))
         return out
 

@@ -8,7 +8,13 @@ For each trip it returns two routes side by side:
 
 The flood data only lowers priority; it never removes a road.
 
-**Map page:** https://floodroutes.nbolt.com/ (login required); also http://127.0.0.1:8086/ on quad. Layers: routing risk areas, smoothed risk surface, bayous. Deep links: `/?from=lat,lon&to=lat,lon`, `view=lat,lon,zoom`, `surface=1`.
+**Map page:** https://floodroutes.nbolt.com/ (login required); also http://127.0.0.1:8086/ on quad.
+- **Trip:** From/To address search, ◎ my location, draggable markers.
+- **Layers:** routing risk areas, smoothed risk surface, bayous, firefighter reports.
+- **Phones:** the trip box sits at the top and results in a bottom sheet. With location permission already granted, the start defaults to My location.
+- **▶ Drive:** follows the GPS position and keeps the screen awake. It re-routes when off the route by more than ~50 m, or every 20 s, and shows remaining time and distance plus the next flood-history area ahead.
+- **Simulate drive:** replays the trip at 4/8/16× for demos.
+- **Deep links:** `/?from=lat,lon&to=lat,lon[&fromLabel=&toLabel=]`, `view=lat,lon,zoom`, `surface=1`, `sim=1` (start a simulated drive).
 
 > *Avoids streets with a history of flooding. Absence of reports does not mean a street is dry. Turn around, don't drown.*
 

@@ -2,77 +2,119 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#7f1d1d">
 <title>Houston Flood Routes</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <style>
   :root {
-    --bg: #ffffff; --fg: #1f2937; --muted: #6b7280; --panel: rgba(255,255,255,0.96);
-    --border: #e5e7eb; --banner-bg: #7f1d1d; --banner-fg: #fff;
+    --bg: #ffffff; --fg: #1f2937; --muted: #6b7280; --panel: rgba(255,255,255,0.97);
+    --border: #e5e7eb; --banner-bg: #7f1d1d; --banner-fg: #fff; --accent: #2563eb;
     --base: #6b7280; --flood: #2563eb;
     --high: #b91c1c; --medium: #ea580c; --low: #eab308;
+    --banner-h: 38px;
   }
   @media (prefers-color-scheme: dark) {
-    :root { --bg: #111827; --fg: #e5e7eb; --muted: #9ca3af; --panel: rgba(17,24,39,0.95); --border: #374151; }
+    :root { --bg: #111827; --fg: #e5e7eb; --muted: #9ca3af; --panel: rgba(17,24,39,0.96); --border: #374151; }
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg);
     font: 14px/1.4 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
   #banner { position: fixed; top: 0; left: 0; right: 0; z-index: 1000; background: var(--banner-bg);
-    color: var(--banner-fg); padding: 8px 16px; font-weight: 600; text-align: center; }
-  #map { position: fixed; top: 38px; bottom: 0; left: 0; right: 0; }
-  #panel { position: fixed; z-index: 900; top: 50px; right: 12px; width: 340px; max-height: calc(100% - 64px);
-    overflow: auto; background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
-    padding: 12px 14px; box-shadow: 0 4px 16px rgba(0,0,0,0.15); }
+    color: var(--banner-fg); padding: 8px 16px; font-weight: 600; text-align: center; min-height: var(--banner-h); }
+  #map { position: fixed; top: var(--banner-h); bottom: 0; left: 0; right: 0; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.15); }
+  #panel { position: fixed; z-index: 900; top: calc(var(--banner-h) + 12px); right: 12px; width: 350px;
+    max-height: calc(100% - var(--banner-h) - 24px); overflow: auto; padding: 12px 14px; }
   #panel h1 { font-size: 16px; margin: 0 0 4px; }
   .muted { color: var(--muted); }
-  .row { display: flex; justify-content: space-between; gap: 8px; margin: 3px 0; }
+  .row { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 3px 0; }
   .sw { display: inline-block; width: 18px; height: 4px; border-radius: 2px; vertical-align: middle; margin-right: 6px; }
   .tier { display: inline-block; padding: 0 6px; border-radius: 4px; color: #fff; font-size: 12px; }
   .tier.high { background: var(--high); } .tier.medium { background: var(--medium); } .tier.low { background: var(--low); color: #111; }
   ul { padding-left: 0; list-style: none; margin: 6px 0; }
   li { margin: 4px 0; }
   button, label { font: inherit; }
-  button { border: 1px solid var(--border); background: transparent; color: var(--fg); border-radius: 6px; padding: 3px 10px; cursor: pointer; }
+  button { border: 1px solid var(--border); background: transparent; color: var(--fg); border-radius: 6px;
+    padding: 4px 10px; cursor: pointer; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  button:disabled { opacity: .45; cursor: default; }
   .big { font-size: 20px; font-weight: 700; }
-  .trip { position: relative; margin: 8px 0 4px; }
+  .trip { position: relative; margin: 6px 0 4px; }
   .field { display: flex; align-items: center; gap: 6px; margin: 4px 0; }
-  .field input { flex: 1; min-width: 0; font: inherit; padding: 6px 8px; border: 1px solid var(--border);
+  .field input { flex: 1; min-width: 0; font: inherit; font-size: 16px; padding: 7px 8px; border: 1px solid var(--border);
     border-radius: 6px; background: var(--bg); color: var(--fg); }
-  .field button { padding: 5px 8px; }
+  .field button { padding: 6px 9px; }
   .dot { width: 12px; height: 12px; border-radius: 50%; border: 2px solid #111; flex: none; }
   .dot.from { background: #16a34a; } .dot.to { background: #dc2626; }
   .suggest { position: absolute; left: 18px; right: 0; z-index: 10; margin: 0; padding: 4px 0; list-style: none;
     background: var(--bg); border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 6px 16px rgba(0,0,0,.18);
     max-height: 260px; overflow: auto; }
-  .suggest li { margin: 0; padding: 6px 10px; cursor: pointer; }
+  .suggest li { margin: 0; padding: 8px 10px; cursor: pointer; }
   .suggest li.active, .suggest li:hover { background: rgba(37,99,235,.12); }
   .kind { font-size: 11px; color: var(--muted); margin-left: 6px; }
   .endpoints { font-weight: 600; margin: 4px 0 6px; }
   details summary { cursor: pointer; font-weight: 600; margin: 6px 0; }
-  @media (max-width: 600px) {
-    #banner { font-size: 12px; padding: 6px 16px; }
-    #panel { top: auto; bottom: 12px; left: 16px; right: 16px; width: auto; max-height: 45%; }
+  .actions { display: flex; gap: 8px; margin: 8px 0 2px; }
+  .actions button { flex: 1; padding: 7px 10px; }
+  #peek { display: none; }
+  /* drive bar */
+  #drive { display: none; position: fixed; z-index: 950; right: 12px; top: calc(var(--banner-h) + 12px); width: 350px;
+    padding: 10px 12px; }
+  body.driving #drive { display: block; }
+  body.driving #panel, body.driving #tripCard { display: none; }
+  #drive .eta { font-size: 22px; font-weight: 700; }
+  #drive .next { margin-top: 4px; }
+  #recenter { position: fixed; z-index: 950; right: 12px; bottom: 24px; display: none; padding: 8px 12px; }
+  body.driving.panned #recenter { display: block; }
+  .me { width: 18px; height: 18px; border-radius: 50%; background: #2563eb; border: 3px solid #fff;
+    box-shadow: 0 0 0 2px rgba(37,99,235,.5); }
+
+  /* ---- phones: trip card on top, results in a bottom sheet ---- */
+  @media (max-width: 700px) {
+    :root { --banner-h: 30px; }
+    #banner { font-size: 11px; padding: 5px 10px; line-height: 1.3; }
+    #tripCard { position: fixed; z-index: 920; left: 8px; right: 8px; top: calc(var(--banner-h) + 6px); padding: 6px 8px; }
+    #tripCard .trip { margin: 0; }
+    #tripCard .row { margin: 2px 0 0; }
+    #panel { top: auto; bottom: 0; left: 0; right: 0; width: auto; border-radius: 14px 14px 0 0;
+      max-height: 62%; padding: 6px 12px calc(10px + env(safe-area-inset-bottom)); }
+    #panel h1 { display: none; }
+    #panel .handle { width: 40px; height: 5px; border-radius: 3px; background: var(--border); margin: 2px auto 6px; }
+    #panel.collapsed { max-height: none; overflow: hidden; }
+    #panel.collapsed > :not(.handle):not(#peek) { display: none; }
+    #peek { display: block; font-weight: 600; cursor: pointer; }
+    #drive { left: 8px; right: 8px; width: auto; top: calc(var(--banner-h) + 6px); }
+    .leaflet-control-zoom { display: none; }
   }
 </style>
 </head>
 <body>
 <div id="banner">Avoids streets with a history of flooding. Absence of reports does not mean a street is dry. Turn around, don't drown.</div>
 <div id="map"></div>
-<div id="panel">
-  <h1>Houston flood-aware routing</h1>
+
+<div id="tripCard">
   <div class="trip">
     <div class="field"><span class="dot from"></span>
-      <input id="fromInput" placeholder="From: address, place, or click the map" autocomplete="off" spellcheck="false">
+      <input id="fromInput" placeholder="From: address, place, or tap the map" autocomplete="off" spellcheck="false" enterkeyhint="next">
       <button id="locBtn" title="Use my location" aria-label="Use my location">◎</button></div>
     <div class="field"><span class="dot to"></span>
-      <input id="toInput" placeholder="To: address, place, or click the map" autocomplete="off" spellcheck="false">
+      <input id="toInput" placeholder="To: address or place" autocomplete="off" spellcheck="false" enterkeyhint="go">
       <button id="swapBtn" title="Swap start and destination" aria-label="Swap">⇅</button></div>
     <ul id="suggest" class="suggest" hidden></ul>
   </div>
-  <div class="row"><span class="muted" id="hint">Type an address or click the map.</span>
+  <div class="row"><span class="muted" id="hint">Type an address or tap the map.</span>
     <button id="reset">Reset</button></div>
-  <details id="layers" open><summary>Map layers</summary>
+</div>
+
+<div id="panel" class="card">
+  <div class="handle" id="handle"></div>
+  <div id="peek" class="muted">Flood-aware routing · tap for details</div>
+  <h1>Houston flood-aware routing</h1>
+  <div id="tripSlot"></div>
+  <div id="result"></div>
+  <details id="layers"><summary>Map layers</summary>
   <div style="margin:4px 0 8px">
     <label><input type="checkbox" id="riskToggle" checked> Risk areas (routing tiers)</label><br>
     <label><input type="checkbox" id="surfaceToggle"> Risk surface (smoothed)</label><br>
@@ -88,16 +130,50 @@
     </div>
   </div>
   </details>
-  <div id="result"></div>
 </div>
+
+<div id="drive" class="card">
+  <div class="row"><span class="eta" id="driveEta">–</span>
+    <span><button id="simSpeed" title="Simulation speed" hidden>8×</button> <button id="stopDrive">Stop</button></span></div>
+  <div class="muted" id="driveTo"></div>
+  <div class="next" id="driveNext"></div>
+  <div class="muted" id="driveNote" style="font-size:12px"></div>
+</div>
+<button id="recenter" class="card">◎ Recenter</button>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script>
 const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const km = m => (m / 1000).toFixed(1) + ' km';
+const mins = s => Math.max(1, Math.round(s / 60)) + ' min';
+const hint = t => { $('hint').textContent = t; };
+const mobile = () => matchMedia('(max-width: 700px)').matches;
+// the safety banner wraps on narrow screens: lay everything out below its real height
+const fitBanner = () => document.documentElement.style.setProperty('--banner-h', $('banner').offsetHeight + 'px');
+fitBanner(); addEventListener('resize', fitBanner);
+
 const map = L.map('map', { zoomControl: true }).setView([29.76, -95.37], 11);
 L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
   maxZoom: 19, attribution: '&copy; OpenStreetMap contributors'
 }).addTo(map);
 
+// ---- layout: trip box inside the panel on desktop, as a top card on phones
+function placeTrip() {
+  const card = $('tripCard');
+  if (mobile()) { card.classList.add('card'); document.body.appendChild(card); }
+  else { card.classList.remove('card'); $('tripSlot').appendChild(card); }
+}
+placeTrip();
+addEventListener('resize', () => { placeTrip(); map.invalidateSize(); });
+const sheet = $('panel');
+const setSheet = open => { if (mobile()) sheet.classList.toggle('collapsed', !open); };
+setSheet(false);
+$('handle').onclick = $('peek').onclick = () => setSheet(sheet.classList.contains('collapsed'));
+if (!mobile()) $('layers').open = true;
+
+// ---- layers
 let riskLayer = null;
 fetch('risk.geojson').then(r => r.json()).then(fc => {
   riskLayer = L.geoJSON(fc, {
@@ -108,42 +184,36 @@ fetch('risk.geojson').then(r => r.json()).then(fc => {
       (f.properties.firefighter_reports ? ' · includes firefighter reports' : ''))
   }).addTo(map);
 });
-document.getElementById('riskToggle').onchange = e => {
-  if (!riskLayer) return;
-  e.target.checked ? riskLayer.addTo(map) : map.removeLayer(riskLayer);
-};
+$('riskToggle').onchange = e => { if (riskLayer) e.target.checked ? riskLayer.addTo(map) : map.removeLayer(riskLayer); };
 
-// Smoothed risk surface: a transparent PNG rendered in Web Mercator rows (risk/surface_overlay.py)
-map.createPane('surface'); map.getPane('surface').style.zIndex = 350;  // under the tier outlines
+map.createPane('surface'); map.getPane('surface').style.zIndex = 350;
 let surfaceLayer = null;
 fetch('risk_surface.json').then(r => r.ok ? r.json() : null).then(m => {
-  if (!m) { document.getElementById('surfaceToggle').disabled = true; return; }
+  if (!m) { $('surfaceToggle').disabled = true; return; }
   surfaceLayer = L.imageOverlay('risk_surface.png?v=' + encodeURIComponent(m.generated), m.bounds,
     { pane: 'surface', opacity: 0.85, interactive: false });
-  if (new URLSearchParams(location.search).get('surface') === '1') {
-    const cb = document.getElementById('surfaceToggle'); cb.checked = true; cb.onchange({ target: cb });
-  }
+  if (new URLSearchParams(location.search).get('surface') === '1') { $('surfaceToggle').checked = true; $('surfaceToggle').onchange({ target: $('surfaceToggle') }); }
 });
-document.getElementById('surfaceToggle').onchange = e => {
+$('surfaceToggle').onchange = e => {
   if (!surfaceLayer) return;
-  document.getElementById('surfaceLegend').style.display = e.target.checked ? 'block' : 'none';
+  $('surfaceLegend').style.display = e.target.checked ? 'block' : 'none';
   e.target.checked ? surfaceLayer.addTo(map) : map.removeLayer(surfaceLayer);
 };
 
-// Bayous (OSM channels)
 let bayouLayer = null;
 fetch('bayous.geojson').then(r => r.ok ? r.json() : null).then(fc => {
-  if (!fc) { document.getElementById('bayouToggle').disabled = true; return; }
-  bayouLayer = L.geoJSON(fc, { style: { color: '#0369a1', weight: 2.5, opacity: 0.8 }, interactive: true,
+  if (!fc) { $('bayouToggle').disabled = true; return; }
+  bayouLayer = L.geoJSON(fc, { style: { color: '#0369a1', weight: 2.5, opacity: 0.8 },
     onEachFeature: (f, l) => l.bindTooltip(f.properties.name, { sticky: true }) });
-  if (document.getElementById('bayouToggle').checked) bayouLayer.addTo(map);
+  if ($('bayouToggle').checked) bayouLayer.addTo(map);
 });
-// Firefighter-reported flooding (Perry & Stein, Rice/Kinder 2019, Appendix A)
+$('bayouToggle').onchange = e => { if (bayouLayer) e.target.checked ? bayouLayer.addTo(map) : map.removeLayer(bayouLayer); };
+
 let hfdLayer = null;
 const sevColor = { cut_off: '#7e22ce', recurring: '#a855f7', major_event: '#c4b5fd' };
 const sevText = { cut_off: 'units can\'t leave the station', recurring: 'floods in most heavy rains', major_event: 'flooded in the named storms' };
 fetch('hfd.geojson').then(r => r.ok ? r.json() : null).then(fc => {
-  if (!fc) { document.getElementById('hfdToggle').disabled = true; return; }
+  if (!fc) { $('hfdToggle').disabled = true; return; }
   const tip = f => `<b>Station ${f.properties.station ?? '?'}</b> · ${sevText[f.properties.severity]}<br>` +
     `<i>“${esc(f.properties.quote)}”</i><br><span class="muted">HFD officer survey, 2018 (Rice/Kinder report, 2019)</span>`;
   hfdLayer = L.geoJSON(fc, {
@@ -151,32 +221,19 @@ fetch('hfd.geojson').then(r => r.ok ? r.json() : null).then(fc => {
     pointToLayer: (f, ll) => L.circleMarker(ll, { radius: 8, color: sevColor[f.properties.severity], weight: 3, fillOpacity: 0.3 }),
     onEachFeature: (f, l) => l.bindTooltip(tip(f), { sticky: true, maxWidth: 320 })
   });
-  if (document.getElementById('hfdToggle').checked) hfdLayer.addTo(map);
+  if ($('hfdToggle').checked) hfdLayer.addTo(map);
 });
-document.getElementById('hfdToggle').onchange = e => {
-  if (!hfdLayer) return;
-  e.target.checked ? hfdLayer.addTo(map) : map.removeLayer(hfdLayer);
-};
+$('hfdToggle').onchange = e => { if (hfdLayer) e.target.checked ? hfdLayer.addTo(map) : map.removeLayer(hfdLayer); };
 
-document.getElementById('bayouToggle').onchange = e => {
-  if (!bayouLayer) return;
-  e.target.checked ? bayouLayer.addTo(map) : map.removeLayer(bayouLayer);
-};
-
-const km = m => (m / 1000).toFixed(1) + ' km';
-const mins = s => Math.round(s / 60) + ' min';
-const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-const $ = id => document.getElementById(id);
-const hint = t => { $('hint').textContent = t; };
-
-// ---- trip state: two ends, each {lat, lng, label, marker}
+// ---- trip state
 const ends = { from: null, to: null };
-let lines = [], routeSeq = 0;
+let lines = [], routeSeq = 0, lastRoute = null;
+let driving = false, sim = false, watchId = null, simTimer = null, wakeLock = null;
 const input = which => $(which === 'from' ? 'fromInput' : 'toInput');
 
-function clearRoute() { lines.forEach(l => map.removeLayer(l)); lines = []; $('result').innerHTML = ''; }
+function clearRoute() { lines.forEach(l => map.removeLayer(l)); lines = []; $('result').innerHTML = ''; lastRoute = null; updatePeek(); }
 
-function setEnd(which, latlng, label, { lookup = false, go = true } = {}) {
+function setEnd(which, latlng, label, { lookup = false, go = true, acc = null } = {}) {
   if (ends[which]?.marker) map.removeLayer(ends[which].marker);
   const marker = L.marker(latlng, {
     draggable: true, title: which === 'from' ? 'Start' : 'Destination',
@@ -184,27 +241,30 @@ function setEnd(which, latlng, label, { lookup = false, go = true } = {}) {
       html: `<div class="dot ${which}" style="width:18px;height:18px"></div>` })
   }).addTo(map);
   marker.on('dragend', () => setEnd(which, marker.getLatLng(), null, { lookup: true }));
-  ends[which] = { lat: latlng.lat, lng: latlng.lng, label: label || '', marker };
+  const mine = label === 'My location';
+  ends[which] = { lat: latlng.lat, lng: latlng.lng, label: label || '', marker, mine };
   input(which).value = label || '…';
   if (lookup || !label) {
     fetch(`reverse?lat=${latlng.lat.toFixed(6)}&lon=${latlng.lng.toFixed(6)}`).then(r => r.ok ? r.json() : null).then(d => {
       if (!d || ends[which]?.marker !== marker) return;
-      ends[which].label = label && label.startsWith('My location') ? `My location (${d.label})` : d.label;
+      const rough = acc && acc > 60 ? ` ±${Math.round(acc)} m` : '';
+      ends[which].label = mine ? `My location (${d.label}${rough})` : d.label;
       input(which).value = ends[which].label;
-      summaryHeader();
-      syncUrl();
+      summaryHeader(); syncUrl();
     });
   }
   if (go) route();
 }
 
 function resetAll() {
+  stopDrive();
   for (const w of ['from', 'to']) { if (ends[w]?.marker) map.removeLayer(ends[w].marker); ends[w] = null; input(w).value = ''; }
-  clearRoute(); hint('Type an address or click the map.'); syncUrl();
+  clearRoute(); hint('Type an address or tap the map.'); syncUrl();
 }
 $('reset').onclick = resetAll;
 
 map.on('click', e => {
+  if (driving) return;
   if (!ends.from) setEnd('from', e.latlng, null);
   else if (!ends.to) setEnd('to', e.latlng, null);
   else { resetAll(); setEnd('from', e.latlng, null); }
@@ -212,22 +272,37 @@ map.on('click', e => {
 
 $('swapBtn').onclick = () => {
   const f = ends.from, t = ends.to;
-  for (const w of ['from', 'to']) { if (ends[w]?.marker) map.removeLayer(ends[w].marker); ends[w] = null; }
+  for (const w of ['from', 'to']) { if (ends[w]?.marker) map.removeLayer(ends[w].marker); ends[w] = null; input(w).value = ''; }
   if (t) setEnd('from', L.latLng(t.lat, t.lng), t.label, { go: false });
   if (f) setEnd('to', L.latLng(f.lat, f.lng), f.label, { go: false });
-  if (!t) input('from').value = ''; if (!f) input('to').value = '';
   route();
 };
 
-$('locBtn').onclick = () => {
-  if (!navigator.geolocation) { hint('This browser cannot share its location.'); return; }
-  hint('Finding your location…');
-  navigator.geolocation.getCurrentPosition(
-    pos => { const ll = L.latLng(pos.coords.latitude, pos.coords.longitude);
-             setEnd('from', ll, 'My location', { lookup: true }); if (!ends.to) map.setView(ll, 15); },
-    err => hint(err.code === 1 ? 'Location permission denied.' : 'Could not get your location.'),
-    { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 });
-};
+// ---- my location: watch for a few seconds and keep the most accurate fix
+function locate({ quiet = false } = {}) {
+  if (!navigator.geolocation) { if (!quiet) hint('This browser cannot share its location.'); return; }
+  if (!quiet) hint('Finding your location…');
+  let best = null, done = false, id = null;
+  const finish = () => {
+    if (done) return; done = true; if (id !== null) navigator.geolocation.clearWatch(id);
+    if (!best) { if (!quiet) hint('Could not get your location.'); return; }
+    const ll = L.latLng(best.latitude, best.longitude);
+    setEnd('from', ll, 'My location', { lookup: true, acc: best.accuracy });
+    if (!ends.to) map.setView(ll, 15);
+  };
+  id = navigator.geolocation.watchPosition(pos => {
+    if (!best || pos.coords.accuracy < best.accuracy) best = pos.coords;
+    if (best.accuracy <= 25) finish();
+  }, err => { if (!quiet) hint(err.code === 1 ? 'Location permission denied.' : 'Could not get your location.'); done = true; },
+     { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 });
+  setTimeout(finish, 6000);
+}
+$('locBtn').onclick = () => locate();
+// phones: if location permission was already granted, start from "My location"
+(async () => {
+  if (!mobile() || new URLSearchParams(location.search).get('from')) return;
+  try { const p = await navigator.permissions.query({ name: 'geolocation' }); if (p.state === 'granted') locate({ quiet: true }); } catch (e) {}
+})();
 
 // ---- address search with suggestions
 const sug = $('suggest');
@@ -245,9 +320,10 @@ function showSug(which, items) {
 }
 function pick(i) {
   const r = sugItems[i]; if (!r) return;
-  hideSug(); setEnd(sugFor, L.latLng(r.lat, r.lon), r.label);
+  const which = sugFor;
+  hideSug(); setEnd(which, L.latLng(r.lat, r.lon), r.label);
   if (!ends.from || !ends.to) map.setView([r.lat, r.lon], 15);
-  input(sugFor === 'from' ? 'to' : 'from').focus();
+  if (which === 'from' && !ends.to) input('to').focus(); else input(which).blur();
 }
 sug.addEventListener('mousedown', e => { const li = e.target.closest('li[data-i]'); if (li) { e.preventDefault(); pick(+li.dataset.i); } });
 for (const which of ['from', 'to']) {
@@ -281,46 +357,46 @@ function syncUrl() {
   const sp = new URLSearchParams(location.search);
   for (const w of ['from', 'to']) {
     const e = ends[w];
-    if (e) { sp.set(w, `${e.lat.toFixed(6)},${e.lng.toFixed(6)}`); e.label ? sp.set(w + 'Label', e.label) : sp.delete(w + 'Label'); }
+    if (e && !e.mine) { sp.set(w, `${e.lat.toFixed(6)},${e.lng.toFixed(6)}`); e.label ? sp.set(w + 'Label', e.label) : sp.delete(w + 'Label'); }
     else { sp.delete(w); sp.delete(w + 'Label'); }
   }
   const qs = sp.toString();
   history.replaceState(null, '', qs ? '?' + qs : location.pathname);
 }
-(() => {
-  const sp = new URLSearchParams(location.search);
-  const v = (sp.get('view') || '').split(',').map(Number);
-  if (v.length === 3 && v.every(isFinite)) map.setView([v[0], v[1]], v[2]);
-  const p = s => { const m = (s || '').split(',').map(Number); return m.length === 2 && m.every(isFinite) ? L.latLng(m[0], m[1]) : null; };
-  const a = p(sp.get('from')), b = p(sp.get('to'));
-  if (a) setEnd('from', a, sp.get('fromLabel'), { go: false });
-  if (b) setEnd('to', b, sp.get('toLabel'), { go: false });
-  if (a && b) route(!v.every(isFinite) || v.length !== 3);
-})();
 
 function summaryHeader() {
   const h = document.querySelector('#result .endpoints');
   if (h && ends.from && ends.to) h.innerHTML = `${esc(ends.from.label || 'Start')} → ${esc(ends.to.label || 'Destination')}`;
+  $('driveTo').textContent = ends.to ? 'to ' + (ends.to.label || 'destination') : '';
+}
+function updatePeek() {
+  const d = lastRoute;
+  $('peek').innerHTML = d
+    ? `Flood-aware ${mins(d.flood_aware.time_s)} · ${km(d.flood_aware.distance_m)} · +${Math.max(d.detour.added_s, 0)} s · ` +
+      `${d.hotspots_avoided.length} hotspots avoided <span class="muted" style="font-weight:400">· tap</span>`
+    : 'Flood-aware routing · tap for details';
 }
 
-async function route(fit = true) {
-  if (!ends.from || !ends.to) { clearRoute(); hint(ends.from ? 'Now choose a destination.' : 'Type an address or click the map.'); syncUrl(); return; }
+async function route(fit = true, { quiet = false } = {}) {
+  if (!ends.from || !ends.to) { clearRoute(); hint(ends.from ? 'Now choose a destination.' : 'Type an address or tap the map.'); syncUrl(); return null; }
   const seq = ++routeSeq;
   const q = e => `${e.lat.toFixed(6)},${e.lng.toFixed(6)}`;
-  hint('Routing…');
-  const r = await fetch(`route?from=${q(ends.from)}&to=${q(ends.to)}`);
-  const d = await r.json();
-  if (seq !== routeSeq) return;
-  if (!r.ok) { hint(d.detail || 'Routing failed'); return; }
-  clearRoute();
-  hint('Drag a marker or edit an address to change the trip.');
+  if (!quiet) hint('Routing…');
+  let r, d;
+  try { r = await fetch(`route?from=${q(ends.from)}&to=${q(ends.to)}`); d = await r.json(); }
+  catch (e) { if (!quiet) hint('Network error'); return null; }
+  if (seq !== routeSeq) return null;
+  if (!r.ok) { hint(d.detail || 'Routing failed'); return null; }
+  lines.forEach(l => map.removeLayer(l)); lines = [];
+  lastRoute = d;
+  if (!quiet) hint(mobile() ? 'Drag a marker or edit an address.' : 'Drag a marker or edit an address to change the trip.');
   const ll = g => g.coordinates.map(c => [c[1], c[0]]);
-  lines.push(L.polyline(ll(d.baseline.geometry), { color: css('--base'), weight: 7, opacity: 0.8 }).addTo(map));
-  lines.push(L.polyline(ll(d.flood_aware.geometry), { color: css('--flood'), weight: 4, opacity: 0.95 }).addTo(map));
-  if (fit) map.fitBounds(lines[0].getBounds().extend(lines[1].getBounds()), { padding: [40, 40] });
+  lines.push(L.polyline(ll(d.baseline.geometry), { color: css('--base'), weight: 7, opacity: driving ? 0.35 : 0.8 }).addTo(map));
+  lines.push(L.polyline(ll(d.flood_aware.geometry), { color: css('--flood'), weight: driving ? 6 : 4, opacity: 0.95 }).addTo(map));
+  if (fit && !driving) map.fitBounds(lines[0].getBounds().extend(lines[1].getBounds()),
+    { paddingTopLeft: [30, mobile() ? 130 : 30], paddingBottomRight: [mobile() ? 30 : 380, mobile() ? 90 : 30] });
 
-  const ex = d.risk_exposure_m, det = d.detour;
-  const hs = d.hotspots_avoided;
+  const ex = d.risk_exposure_m, det = d.detour, hs = d.hotspots_avoided;
   const hsList = hs.length ? '<ul>' + hs.slice(0, 12).map(h =>
       `<li><span class="tier ${h.tier}">${h.tier}</span> ${h.storm_events} storm events, ${h.reports} reports ` +
       `<span class="muted">(${esc(h.first_year)}–${esc(h.last_year)}, ${h.meters_inside} m of route)</span></li>`).join('') +
@@ -337,12 +413,153 @@ async function route(fit = true) {
     <div class="row" style="margin-top:8px"><span>Added</span>
       <span class="big">+${Math.max(det.added_s, 0) >= 60 ? mins(det.added_s) : Math.max(det.added_s, 0) + ' s'}</span></div>
     <div class="row muted"><span></span><span>+${km(Math.max(det.added_m, 0))} (${det.added_distance_pct}% distance, ${det.added_time_pct}% time)</span></div>
+    <div class="actions"><button class="primary" id="driveBtn">▶ Drive</button><button id="simBtn">Simulate drive</button></div>
     <div class="row muted"><span>Risk exposure (high/med/low)</span><span></span></div>
     <div class="row"><span class="muted">direct</span><span>${expo('baseline')}</span></div>
     <div class="row"><span class="muted">flood-aware</span><span>${expo('flood_aware')}</span></div>
     <div style="margin-top:8px"><b>Hotspots avoided: ${hs.length}</b></div>${hsList}`;
+  $('driveBtn').onclick = () => startDrive(false);
+  $('simBtn').onclick = () => startDrive(true);
+  summaryHeader(); updatePeek(); syncUrl();
+  return d;
+}
+
+(() => {
+  const sp = new URLSearchParams(location.search);
+  const v = (sp.get('view') || '').split(',').map(Number);
+  const hasView = v.length === 3 && v.every(isFinite);
+  if (hasView) map.setView([v[0], v[1]], v[2]);
+  const p = s => { const m = (s || '').split(',').map(Number); return m.length === 2 && m.every(isFinite) ? L.latLng(m[0], m[1]) : null; };
+  const a = p(sp.get('from')), b = p(sp.get('to'));
+  if (a) setEnd('from', a, sp.get('fromLabel'), { go: false });
+  if (b) setEnd('to', b, sp.get('toLabel'), { go: false });
+  if (a && b) route(!hasView).then(() => { if (sp.get('sim') === '1') startDrive(true); });
+})();
+
+// ================= drive mode =================
+let meMarker = null, meCircle = null, followMe = true, lastRerouteAt = 0, rerouting = false, simSpeed = 8;
+
+const R = 6371000, rad = Math.PI / 180;
+function metres(a, b) { const x = (b.lng - a.lng) * rad * Math.cos((a.lat + b.lat) / 2 * rad), y = (b.lat - a.lat) * rad; return Math.hypot(x, y) * R; }
+// where a point sits along a polyline [[lat,lng],...]: {along, off, total} in metres
+function project(pt, coords) {
+  let best = { off: Infinity, along: 0 }, walked = 0;
+  for (let i = 0; i < coords.length - 1; i++) {
+    const a = { lat: coords[i][0], lng: coords[i][1] }, b = { lat: coords[i + 1][0], lng: coords[i + 1][1] };
+    const kx = Math.cos(a.lat * rad) * R * rad, ky = R * rad;
+    const bx = (b.lng - a.lng) * kx, by = (b.lat - a.lat) * ky, px = (pt.lng - a.lng) * kx, py = (pt.lat - a.lat) * ky;
+    const seg = Math.hypot(bx, by);
+    const t = seg ? Math.max(0, Math.min(1, (px * bx + py * by) / (seg * seg))) : 0;
+    const off = Math.hypot(px - t * bx, py - t * by);
+    if (off < best.off) best = { off, along: walked + t * seg };
+    walked += seg;
+  }
+  return { ...best, total: walked };
+}
+function pointAt(coords, dist) {
+  let walked = 0;
+  for (let i = 0; i < coords.length - 1; i++) {
+    const a = L.latLng(coords[i]), b = L.latLng(coords[i + 1]), seg = metres(a, b);
+    if (walked + seg >= dist) { const t = seg ? (dist - walked) / seg : 0; return L.latLng(a.lat + t * (b.lat - a.lat), a.lng + t * (b.lng - a.lng)); }
+    walked += seg;
+  }
+  return L.latLng(coords[coords.length - 1]);
+}
+
+async function keepAwake() {
+  try { if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } catch (e) { wakeLock = null; }
+}
+document.addEventListener('visibilitychange', () => { if (driving && document.visibilityState === 'visible') keepAwake(); });
+
+function startDrive(simulate) {
+  if (!lastRoute || !ends.to) return;
+  driving = true; sim = simulate; followMe = true; lastRerouteAt = Date.now();
+  document.body.classList.add('driving'); document.body.classList.remove('panned');
+  $('simSpeed').hidden = !simulate; $('simSpeed').textContent = simSpeed + '×';
+  $('driveNote').textContent = simulate ? 'Simulated drive along the flood-aware route.'
+    : 'Eyes on the road: let a passenger handle the phone. The screen stays on while driving.';
+  $('driveNext').textContent = ''; $('driveEta').textContent = simulate ? 'Starting…' : 'Waiting for GPS…';
   summaryHeader();
-  syncUrl();
+  keepAwake();
+  lines.forEach((l, i) => l.setStyle(i === 0 ? { opacity: 0.35 } : { weight: 6 }));
+  if (simulate) {
+    const coords = lastRoute.flood_aware.geometry.coordinates.map(c => [c[1], c[0]]);
+    let dist = 0;
+    const step = () => {
+      if (!driving) return;
+      dist += 13.4 * simSpeed * 0.5;  // ~30 mph, sped up
+      const p = pointAt(coords, dist);
+      onPosition({ lat: p.lat, lng: p.lng, accuracy: 8 });
+      simTimer = setTimeout(step, 500);
+    };
+    step();
+  } else if (navigator.geolocation) {
+    watchId = navigator.geolocation.watchPosition(
+      pos => onPosition({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy }),
+      err => { $('driveNote').textContent = err.code === 1 ? 'Location permission denied.' : 'Waiting for GPS…'; },
+      { enableHighAccuracy: true, maximumAge: 2000, timeout: 30000 });
+  }
+}
+
+function stopDrive() {
+  if (!driving) return;
+  driving = false;
+  if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+  watchId = null;
+  clearTimeout(simTimer);
+  if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; }
+  document.body.classList.remove('driving', 'panned');
+  if (meMarker) { map.removeLayer(meMarker); map.removeLayer(meCircle); meMarker = meCircle = null; }
+  lines.forEach((l, i) => l.setStyle(i === 0 ? { opacity: 0.8 } : { weight: 4 }));
+}
+$('stopDrive').onclick = stopDrive;
+$('simSpeed').onclick = () => { simSpeed = simSpeed === 8 ? 16 : simSpeed === 16 ? 4 : 8; $('simSpeed').textContent = simSpeed + '×'; };
+map.on('dragstart', () => { if (driving) { followMe = false; document.body.classList.add('panned'); } });
+$('recenter').onclick = () => { followMe = true; document.body.classList.remove('panned'); if (meMarker) map.setView(meMarker.getLatLng(), 16); };
+
+async function onPosition(p) {
+  if (!driving || !lastRoute) return;
+  const here = L.latLng(p.lat, p.lng);
+  if (!meMarker) {
+    meCircle = L.circle(here, { radius: p.accuracy, weight: 1, color: '#2563eb', fillOpacity: 0.1, interactive: false }).addTo(map);
+    meMarker = L.marker(here, { icon: L.divIcon({ className: '', iconSize: [24, 24], iconAnchor: [12, 12], html: '<div class="me"></div>' }),
+      interactive: false, zIndexOffset: 1000 }).addTo(map);
+    map.setView(here, 16);
+  } else {
+    meMarker.setLatLng(here); meCircle.setLatLng(here).setRadius(p.accuracy);
+    if (followMe) map.panTo(here, { animate: true, duration: 0.4 });
+  }
+
+  const coords = lastRoute.flood_aware.geometry.coordinates.map(c => [c[1], c[0]]);
+  const pr = project(here, coords);
+  const left = Math.max(0, pr.total - pr.along);
+  const tLeft = lastRoute.flood_aware.time_s * (pr.total ? left / pr.total : 0);
+  $('driveEta').textContent = `${mins(tLeft)} · ${km(left)}`;
+
+  if (metres(here, L.latLng(ends.to.lat, ends.to.lng)) < 40 || left < 30) {
+    stopDrive(); hint('Arrived.'); return;
+  }
+  const ahead = (lastRoute.flood_aware.hotspots_crossed || [])
+    .filter(h => h.along_m != null && h.along_m + h.meters_inside > pr.along)
+    .sort((a, b) => a.along_m - b.along_m)[0];
+  $('driveNext').innerHTML = ahead
+    ? (ahead.along_m <= pr.along
+        ? `<span class="tier ${ahead.tier}">${ahead.tier}</span> In a flood-history area now (${ahead.storm_events} storm${ahead.storm_events === 1 ? '' : 's'})`
+        : `<span class="tier ${ahead.tier}">${ahead.tier}</span> Flood-history area in ${km(ahead.along_m - pr.along)} (${ahead.storm_events} storm${ahead.storm_events === 1 ? '' : 's'})`)
+    : 'No flood-history areas left on this route.';
+
+  // re-route from here when off the route, or every 20 s (live data can change the best route)
+  const now = Date.now();
+  const off = !sim && pr.off > 50 && p.accuracy < 60;
+  if (!rerouting && (off || (!sim && now - lastRerouteAt > 20000))) {
+    rerouting = true; lastRerouteAt = now;
+    if (ends.from?.marker) ends.from.marker.setLatLng(here);
+    ends.from = { lat: here.lat, lng: here.lng, label: 'My location', marker: ends.from?.marker, mine: true };
+    input('from').value = 'My location';
+    const d = await route(false, { quiet: true });
+    if (d && off) $('driveNote').textContent = 'Re-routed from your position.';
+    rerouting = false;
+  }
 }
 </script>
 </body>
