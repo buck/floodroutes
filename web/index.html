@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Houston Flood Routes</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+  :root {
+    --bg: #ffffff; --fg: #1f2937; --muted: #6b7280; --panel: rgba(255,255,255,0.96);
+    --border: #e5e7eb; --banner-bg: #7f1d1d; --banner-fg: #fff;
+    --base: #6b7280; --flood: #2563eb;
+    --high: #b91c1c; --medium: #ea580c; --low: #eab308;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #111827; --fg: #e5e7eb; --muted: #9ca3af; --panel: rgba(17,24,39,0.95); --border: #374151; }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg);
+    font: 14px/1.4 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+  #banner { position: fixed; top: 0; left: 0; right: 0; z-index: 1000; background: var(--banner-bg);
+    color: var(--banner-fg); padding: 8px 16px; font-weight: 600; text-align: center; }
+  #map { position: fixed; top: 38px; bottom: 0; left: 0; right: 0; }
+  #panel { position: fixed; z-index: 900; top: 50px; right: 12px; width: 340px; max-height: calc(100% - 64px);
+    overflow: auto; background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 12px 14px; box-shadow: 0 4px 16px rgba(0,0,0,0.15); }
+  #panel h1 { font-size: 16px; margin: 0 0 4px; }
+  .muted { color: var(--muted); }
+  .row { display: flex; justify-content: space-between; gap: 8px; margin: 3px 0; }
+  .sw { display: inline-block; width: 18px; height: 4px; border-radius: 2px; vertical-align: middle; margin-right: 6px; }
+  .tier { display: inline-block; padding: 0 6px; border-radius: 4px; color: #fff; font-size: 12px; }
+  .tier.high { background: var(--high); } .tier.medium { background: var(--medium); } .tier.low { background: var(--low); color: #111; }
+  ul { padding-left: 0; list-style: none; margin: 6px 0; }
+  li { margin: 4px 0; }
+  button, label { font: inherit; }
+  button { border: 1px solid var(--border); background: transparent; color: var(--fg); border-radius: 6px; padding: 3px 10px; cursor: pointer; }
+  .big { font-size: 20px; font-weight: 700; }
+  @media (max-width: 600px) {
+    #banner { font-size: 12px; padding: 6px 16px; }
+    #panel { top: auto; bottom: 12px; left: 16px; right: 16px; width: auto; max-height: 45%; }
+  }
+</style>
+</head>
+<body>
+<div id="banner">Avoids streets with a history of flooding. Absence of reports does not mean a street is dry. Turn around, don't drown.</div>
+<div id="map"></div>
+<div id="panel">
+  <h1>Houston flood-aware routing</h1>
+  <div class="muted" id="hint">Click the map to set a start, then an end.</div>
+  <div style="margin:8px 0">
+    <label><input type="checkbox" id="riskToggle" checked> Flood-history risk areas</label>
+    <button id="reset" style="float:right">Reset</button>
+  </div>
+  <div class="muted" style="font-size:12px">
+    <span class="tier high">high</span> <span class="tier medium">medium</span> <span class="tier low">low</span>
+    from Houston 311 reports 2011–2026
+  </div>
+  <div id="result"></div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const map = L.map('map', { zoomControl: true }).setView([29.76, -95.37], 11);
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  maxZoom: 19, attribution: '&copy; OpenStreetMap contributors'
+}).addTo(map);
+
+let riskLayer = null;
+fetch('risk.geojson').then(r => r.json()).then(fc => {
+  riskLayer = L.geoJSON(fc, {
+    style: f => ({ color: css('--' + f.properties.tier), weight: 1, fillOpacity: 0.35 }),
+    onEachFeature: (f, l) => l.bindTooltip(
+      `${f.properties.tier} risk · ${f.properties.storm_events} storm events · ` +
+      `${f.properties.cases} reports (${(f.properties.first_day || '').slice(0, 4)}–${(f.properties.last_day || '').slice(0, 4)})`)
+  }).addTo(map);
+});
+document.getElementById('riskToggle').onchange = e => {
+  if (!riskLayer) return;
+  e.target.checked ? riskLayer.addTo(map) : map.removeLayer(riskLayer);
+};
+
+let pts = [], markers = [], lines = [];
+const clear = () => { markers.concat(lines).forEach(l => map.removeLayer(l)); markers = []; lines = []; };
+document.getElementById('reset').onclick = () => {
+  pts = []; clear(); document.getElementById('result').innerHTML = '';
+  document.getElementById('hint').textContent = 'Click the map to set a start, then an end.';
+};
+
+map.on('click', e => {
+  if (pts.length === 2) { pts = []; clear(); document.getElementById('result').innerHTML = ''; }
+  pts.push(e.latlng);
+  markers.push(L.circleMarker(e.latlng, { radius: 7, color: '#111', fillColor: pts.length === 1 ? '#16a34a' : '#dc2626', fillOpacity: 1 }).addTo(map));
+  if (pts.length === 1) { document.getElementById('hint').textContent = 'Now click the destination.'; return; }
+  route();
+});
+
+// Deep link: ?from=lat,lon&to=lat,lon routes on load (used for demos and validation screenshots)
+(() => {
+  const sp = new URLSearchParams(location.search);
+  const p = s => { const m = (s || '').split(',').map(Number); return m.length === 2 && m.every(isFinite) ? L.latLng(m[0], m[1]) : null; };
+  const a = p(sp.get('from')), b = p(sp.get('to'));
+  if (a && b) setTimeout(() => { map.fire('click', { latlng: a }); map.fire('click', { latlng: b }); }, 0);
+})();
+
+const km = m => (m / 1000).toFixed(1) + ' km';
+const mins = s => Math.round(s / 60) + ' min';
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+async function route() {
+  const q = p => `${p.lat.toFixed(6)},${p.lng.toFixed(6)}`;
+  document.getElementById('hint').textContent = 'Routing…';
+  const r = await fetch(`route?from=${q(pts[0])}&to=${q(pts[1])}`);
+  const d = await r.json();
+  if (!r.ok) { document.getElementById('hint').textContent = d.detail || 'Routing failed'; return; }
+  document.getElementById('hint').textContent = 'Click the map again to start over.';
+  const ll = g => g.coordinates.map(c => [c[1], c[0]]);
+  lines.push(L.polyline(ll(d.baseline.geometry), { color: css('--base'), weight: 7, opacity: 0.8 }).addTo(map));
+  lines.push(L.polyline(ll(d.flood_aware.geometry), { color: css('--flood'), weight: 4, opacity: 0.95 }).addTo(map));
+  map.fitBounds(lines[0].getBounds().extend(lines[1].getBounds()), { padding: [40, 40] });
+
+  const ex = d.risk_exposure_m, det = d.detour;
+  const hs = d.hotspots_avoided;
+  const hsList = hs.length ? '<ul>' + hs.slice(0, 12).map(h =>
+      `<li><span class="tier ${h.tier}">${h.tier}</span> ${h.storm_events} storm events, ${h.reports} reports ` +
+      `<span class="muted">(${esc(h.first_year)}–${esc(h.last_year)}, ${h.meters_inside} m of route)</span></li>`).join('') +
+      (hs.length > 12 ? `<li class="muted">…and ${hs.length - 12} more</li>` : '') + '</ul>'
+    : '<div class="muted">No flood-history areas on the direct route.</div>';
+  const expo = k => `${ex[k].high} / ${ex[k].medium} / ${ex[k].low} m`;
+  document.getElementById('result').innerHTML = `
+    <hr>
+    <div class="row"><span><span class="sw" style="background:${css('--base')}"></span>Direct</span>
+      <span>${km(d.baseline.distance_m)} · ${mins(d.baseline.time_s)}</span></div>
+    <div class="row"><span><span class="sw" style="background:${css('--flood')}"></span>Flood-aware</span>
+      <span>${km(d.flood_aware.distance_m)} · ${mins(d.flood_aware.time_s)}</span></div>
+    <div class="row" style="margin-top:8px"><span>Added</span>
+      <span class="big">+${Math.max(det.added_s, 0) >= 60 ? mins(det.added_s) : Math.max(det.added_s, 0) + ' s'}</span></div>
+    <div class="row muted"><span></span><span>+${km(Math.max(det.added_m, 0))} (${det.added_distance_pct}% distance, ${det.added_time_pct}% time)</span></div>
+    <div class="row muted"><span>Risk exposure (high/med/low)</span><span></span></div>
+    <div class="row"><span class="muted">direct</span><span>${expo('baseline')}</span></div>
+    <div class="row"><span class="muted">flood-aware</span><span>${expo('flood_aware')}</span></div>
+    <div style="margin-top:8px"><b>Hotspots avoided: ${hs.length}</b></div>${hsList}`;
+}
+</script>
+</body>
+</html>

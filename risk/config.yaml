@@ -1,0 +1,46 @@
+# Phase 4 risk surface. Edit and rerun risk/build_risk.py (idempotent).
+#
+# score(hex) = recurrence(hex) * sum over its flood signals of tier_weight * decay(age)
+#   decay(age)      = 0.5 ** (age_years / half_life_years)
+#   recurrence(hex) = 1 + per_event * (distinct storm events with a signal in the hex)
+# so a hex reported in five separate storms outranks one with ten calls in a single storm.
+
+h3_resolution: 10          # ~66 m edge, ~15,000 m2: about one block face
+
+tier_weights:
+  strong: 3.0
+  moderate: 1.5
+  weak: 0.5
+
+half_life_years: 8
+as_of: null                # null = today; set YYYY-MM-DD for reproducible builds
+
+recurrence:
+  per_event: 1.0
+
+# Duplicate reports (neighbours calling about the same puddle) pile up on one
+# day; count at most this many signals per hex per day.
+max_signals_per_hex_day: 3
+
+# Hex score thresholds for the three tiers. Hexes below `low` are dropped.
+# Chosen from the 2026-09-25 distribution (34,800 hexes with any signal):
+#   >=10: ~6,300 hexes  >=25: ~2,300  >=60: ~600. A score of 6 is one strong
+#   report in one storm event; 60 is e.g. five strong reports across three storms.
+thresholds:
+  low: 10.0
+  medium: 25.0
+  high: 60.0
+
+# Polygon output
+simplify_m: 10             # Douglas-Peucker tolerance in metres
+min_hexes_per_polygon: 1
+
+# GraphHopper car_flood profile: multiply road priority inside each tier.
+# Priority (not speed), so travel-time estimates stay honest.
+graphhopper_priority:
+  high: 0.05
+  medium: 0.25
+  low: 0.6
+# 'multipolygon': one area per tier (3 areas, short conditions).
+# 'polygon':      one area per polygon (high_0001 ...), for GH versions without MultiPolygon support.
+graphhopper_area_mode: multipolygon

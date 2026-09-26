@@ -17,5 +17,7 @@ pat="MTD|compressed-${year}"
 echo "== $(date -Is) refresh (${pat})"
 "$PYTHON" ingest/download.py --only "$pat" --keep 2
 "$PYTHON" ingest/load.py --only "$pat"
-# Phase 3 hook: geocode newly loaded cases here once geocode/ exists.
+"$PYTHON" classify/classify.py
+"$PYTHON" geocode/geocode.py --priority 0 --no-report
+# The risk surface and graph are rebuilt separately: graphhopper/rebuild.sh
 echo "== $(date -Is) done"

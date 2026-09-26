@@ -1,0 +1,47 @@
+# GraphHopper 11.0 config for floodroutes. Based on config-example.yml (kept alongside for reference).
+graphhopper:
+  datareader.file: ../data/osm/houston.osm.pbf
+  graph.location: graph-cache
+  custom_models.directory: custom_models
+
+  profiles:
+    - name: car
+      custom_model_files: [car.json]
+    # car plus flood-risk priority areas, written by write_custom_model.py
+    - name: car_flood
+      custom_model_files: [car.json, flood_risk.json]
+
+  # CH for the plain car profile (fast); LM for both so per-request custom
+  # models (live high-water areas later) keep working. car_flood weights are
+  # always >= car weights, so it can reuse car's landmark preparation.
+  profiles_ch:
+    - profile: car
+  profiles_lm:
+    - profile: car
+    - profile: car_flood
+      preparation_profile: car
+  prepare.lm.landmarks: 16
+  prepare.lm.threads: 2
+
+  graph.encoded_values: car_access, car_average_speed, road_access, road_class, road_environment
+  import.osm.ignored_highways: footway,construction,cycleway,path,steps,pedestrian,bridleway
+  routing.snap_preventions_default: tunnel, bridge, ferry
+  routing.non_ch.max_waypoint_distance: 1000000
+  graph.dataaccess.default_type: RAM_STORE
+
+server:
+  application_connectors:
+    - type: http
+      port: 8989
+      bind_host: localhost
+  request_log:
+    appenders: []
+  admin_connectors:
+    - type: http
+      port: 8990
+      bind_host: localhost
+logging:
+  appenders:
+    - type: console
+      threshold: INFO
+      time_zone: America/Chicago

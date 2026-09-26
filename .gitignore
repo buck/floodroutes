@@ -8,3 +8,8 @@ graphhopper/*.jar
 graphhopper/*.osm.pbf
 .env
 docs/classification_sample*.csv
+graphhopper/graph-cache*/
+graphhopper/config.import.yml
+notes
+notes.*
+.*.swp

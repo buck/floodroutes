@@ -1,0 +1,12 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {"source": "fixture", "note": "example high-water report box, not real data"},
+      "geometry": {"type": "Polygon", "coordinates": [[
+        [-95.4262, 29.7795], [-95.4228, 29.7795], [-95.4228, 29.7815], [-95.4262, 29.7815], [-95.4262, 29.7795]
+      ]]}
+    }
+  ]
+}
