@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>About Houston Flood Routes</title>
+<style>
+  :root { --bg: #ffffff; --fg: #1f2937; --muted: #6b7280; --border: #e5e7eb; --accent: #1d4ed8; --warn-bg: #fef2f2; --warn-fg: #7f1d1d; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #111827; --fg: #e5e7eb; --muted: #9ca3af; --border: #374151; --accent: #93c5fd; --warn-bg: #3b1212; --warn-fg: #fecaca; }
+  }
+  html, body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.55 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+  main { max-width: 720px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 26px; margin: 0 0 4px; } h2 { font-size: 19px; margin: 28px 0 8px; }
+  a { color: var(--accent); } .muted { color: var(--muted); }
+  .warn { background: var(--warn-bg); color: var(--warn-fg); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; margin: 18px 0; }
+  .warn b { display: block; font-size: 18px; margin-bottom: 4px; }
+  ul { padding-left: 20px; } li { margin: 4px 0; }
+</style>
+</head>
+<body>
+<main>
+<p><a href="./">← Back to the map</a></p>
+<h1>Houston Flood Routes</h1>
+<p class="muted">A hackathon demonstration of flood-aware driving directions for Houston.</p>
+
+<div class="warn">
+  <b>Not for emergency use.</b>
+  This map shows where streets have flooded <i>in the past</i>. It knows nothing about today's water.
+  A street with no history can still flood. During active flooding, follow official guidance, never drive into
+  water of unknown depth, and <b>call 911 if you are trapped</b>. Turn around, don't drown.
+</div>
+
+<h2>What it does</h2>
+<p>For any trip it shows two routes: the normal fastest route (grey) and a flood-aware route (blue) that steers
+around streets with a history of flooding. The flood-aware route only prefers other streets; it never closes a road.
+On a typical trip the detour costs about half a minute.</p>
+
+<h2>Where the flood history comes from</h2>
+<ul>
+  <li><b>City of Houston 311 service requests, 2011–2026.</b> About 163,000 reports of flooding, standing water and
+    drainage problems, grouped into ~130 m hexagons. The score weights repeat flooding across separate storms, so a street that
+    floods in storm after storm scores higher than one with many calls in a single storm. Older reports count
+    less (the city does fix drainage).</li>
+  <li><b>Houston firefighters.</b> Street-level comments from the 2018 survey of all 88 HFD stations in
+    <a href="https://kinder.rice.edu/research/measuring-flooding-houston-fire-department"><i>Measuring Flooding with the
+    Houston Fire Department</i></a> (Perry &amp; Stein, Rice University / Kinder Institute, 2019), shown as the purple
+    "Firefighter reports" layer.</li>
+</ul>
+
+<h2>Known limits</h2>
+<ul>
+  <li><b>311 records where people report, not where water is.</b> Roads with few homes beside them (bayou-side boulevards,
+    freeway frontage roads, underpasses) are under-reported. So are neighbourhoods where fewer residents call 311.</li>
+  <li><b>History, not live conditions.</b> No rain, gauge or road-sensor data is used yet.</li>
+  <li><b>Addresses are approximate.</b> Most are placed along their block from Census address ranges.</li>
+</ul>
+
+<h2>Official, live information</h2>
+<ul>
+  <li><a href="https://traffic.houstontranstar.org/flood/">Houston TranStar: roadway flooding</a></li>
+  <li><a href="https://www.harriscountyfws.org/">Harris County Flood Warning System</a> (rainfall and bayou levels)</li>
+  <li><a href="https://www.readyharris.org/">ReadyHarris</a> (Harris County emergency information)</li>
+  <li><a href="https://www.weather.gov/hgx/">National Weather Service, Houston/Galveston</a></li>
+</ul>
+
+<h2>Privacy</h2>
+<p>No resident names, comments or case numbers are on this site; only aggregate history. Addresses you type and your
+location are used to answer your request and are not stored: the server logs page paths, not the addresses or
+coordinates in a request. Map tiles are cached on this server, so your browser does not contact OpenStreetMap directly.</p>
+
+<h2>Credits</h2>
+<p>Map data © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors. Routing by
+<a href="https://www.graphhopper.com/open-source/">GraphHopper</a>. Addresses from US Census TIGER/Line.
+311 data from the City of Houston. Firefighter comments from Rice University / Kinder Institute.</p>
+<p class="muted">Built for a Houston hackathon, 2026. Questions: <a href="mailto:buck@nbolt.com">buck@nbolt.com</a></p>
+</main>
+</body>
+</html>

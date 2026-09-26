@@ -186,3 +186,10 @@ def test_reverse_geocode():
     r = client.get("/reverse", params={"lat": 29.681555, "lon": -95.460975})
     assert r.status_code == 200 and "Braeswood" in r.json()["label"]
     assert client.get("/reverse", params={"lat": 40.7, "lon": -74.0}).status_code == 422
+
+
+def test_about_page():
+    r = client.get("/about")
+    assert r.status_code == 200 and "text/html" in r.headers["content-type"]
+    assert "Not for emergency use" in r.text and "911" in r.text
+    assert 'href="about"' in client.get("/").text

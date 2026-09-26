@@ -38,6 +38,7 @@ BAYOUS = ROOT / "data" / "osm" / "bayous.geojson"
 HFD = ROOT / "risk" / "hfd_locations.geojson"
 GEOCODER_DB = ROOT / "data" / "geocoder.sqlite"
 WEB = ROOT / "web" / "index.html"
+ABOUT = ROOT / "web" / "about.html"
 GH = os.getenv("GRAPHHOPPER_URL", "http://127.0.0.1:8989")
 BBOX = (-96.2, 29.2, -94.7, 30.4)  # graph extent
 TIER_ORDER = {"high": 0, "medium": 1, "low": 2}
@@ -287,3 +288,8 @@ async def health():
 @app.get("/")
 def index():
     return FileResponse(WEB)
+
+
+@app.get("/about")
+def about():
+    return FileResponse(ABOUT)

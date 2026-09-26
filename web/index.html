@@ -91,7 +91,7 @@
 </style>
 </head>
 <body>
-<div id="banner">Avoids streets with a history of flooding. Absence of reports does not mean a street is dry. Turn around, don't drown.</div>
+<div id="banner">Avoids streets with a history of flooding. Absence of reports does not mean a street is dry. Turn around, don't drown. <a href="about" style="color:#fff;white-space:nowrap">About &amp; limits</a></div>
 <div id="map"></div>
 
 <div id="tripCard">
@@ -155,8 +155,11 @@ const fitBanner = () => document.documentElement.style.setProperty('--banner-h',
 fitBanner(); addEventListener('resize', fitBanner);
 
 const map = L.map('map', { zoomControl: true }).setView([29.76, -95.37], 11);
-L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  maxZoom: 19, attribution: '&copy; OpenStreetMap contributors'
+// On the public site tiles come through our nginx cache (/tiles/), which keeps the load off
+// OpenStreetMap's volunteer servers; a local copy (quad) fetches from OSM directly.
+const localHost = ['localhost', '127.0.0.1'].includes(location.hostname);
+L.tileLayer(localHost ? 'https://tile.openstreetmap.org/{z}/{x}/{y}.png' : 'tiles/{z}/{x}/{y}.png', {
+  maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
 }).addTo(map);
 
 // ---- layout: trip box inside the panel on desktop, as a top card on phones

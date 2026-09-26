@@ -8,7 +8,7 @@ For each trip it returns two routes side by side:
 
 The flood data only lowers priority; it never removes a road.
 
-**Map page:** https://floodroutes.nbolt.com/ (login required); also http://127.0.0.1:8086/ on quad.
+**Map page:** https://floodroutes.nbolt.com/ (public; see `/about` for limits); also http://127.0.0.1:8086/ on quad.
 - **Trip:** From/To address search, ◎ my location, draggable markers.
 - **Layers:** routing risk areas, smoothed risk surface, bayous, firefighter reports.
 - **Phones:** the trip box sits at the top and results in a bottom sheet. With location permission already granted, the start defaults to My location.
@@ -71,19 +71,22 @@ Each makes detours longer and more frequent. How much delay drivers will accept 
 
 ## Public front end: https://floodroutes.nbolt.com (gitano)
 
-Map and routing are served from **gitano** (NixOS VPS, 4 cores, 8 GB), behind **basic auth**:
-- the username and password are in quad's `.env` (`FLOODROUTES_WEB_USER`, `FLOODROUTES_WEB_PASSWORD`; gitignored);
-- the server holds only the hash (`/var/lib/floodroutes/htpasswd`).
-
-The data pipeline stays on quad (Postgres, 311 refresh, classification, geocoding, graph import).
+**Public since 2026-09-26, no login.** Map and routing are served from **gitano** (NixOS VPS, 4 cores, 8 GB). The data pipeline stays on quad (Postgres, 311 refresh, classification, geocoding, graph import).
 
 - **NixOS:** `deploy/gitano/floodroutes.nix` is copied to `/etc/nixos/floodroutes.nix` on gitano and imported from `configuration.nix` (gitano's `/etc/nixos` is a local git repo). It defines:
-  - GraphHopper (`-Xmx2g`) and the API, both bound to localhost;
-  - nginx with Let's Encrypt and basic auth;
+  - GraphHopper (`-Xmx2g`);
+  - the API (4 uvicorn workers, no access log);
+  - nginx with Let's Encrypt;
   - firewall ports 80/443.
-- **Deploy:** `deploy/gitano/deploy.sh` rsyncs only built artifacts to `/srv/floodroutes`: the graph, the risk / firefighter / bayou GeoJSON, the surface overlay, the web page and the API code. The graph arrives beside the live one and is swapped in, so routing is down for only a few seconds. The script also rewrites the auth file from `.env`. `graphhopper/rebuild.sh` runs it at the end (`DEPLOY=0` skips).
-- **DNS:** `floodroutes CNAME gitano` in the nbolt.com zone (primary on remate's bind container; secondaries palmas, afraid.org, dollardns).
-- **HTTPS:** phone browsers can use the page and (later) its location features.
+- **nginx in front of the API:**
+  - **Rate limits per visitor:** `/route` and `/reverse` 3/s with bursts of 20; `/geocode` 10/s with bursts of 40. Excess gets HTTP 429. Many people behind one shared address (a venue, a newsroom) share the limit.
+  - **OpenStreetMap tile cache at `/tiles/`:** tiles are fetched from tile.openstreetmap.org only when viewed (no pre-seeding, per OSM's tile policy), with an identifying User-Agent, honouring OSM's cache headers. Up to 20 GB, 60 days. Visitors' browsers never contact OSM directly.
+  - **Private logs:** `/var/log/nginx/floodroutes.log` records the path without the query string and the visitor address truncated to /24 (/48 for IPv6). Typed addresses and GPS positions are never written to disk.
+- **About & limits page (`/about`)**, linked from the banner: not for emergency use, data sources and limits, official live links (TranStar, Harris County FWS, ReadyHarris, NWS), credits, contact.
+- **Deploy:** `deploy/gitano/deploy.sh` rsyncs only built artifacts to `/srv/floodroutes`: the graph, GeoJSON layers, surface overlay, address index, web pages and API code. The graph is swapped in, so routing is down for a few seconds. `graphhopper/rebuild.sh` runs it at the end (`DEPLOY=0` skips).
+- **To require a login again:** add `basicAuthFile = "/var/lib/floodroutes/htpasswd";` to the virtual host. `deploy.sh` keeps that file current from quad's `.env` (`FLOODROUTES_WEB_USER` / `_PASSWORD`).
+- **DNS:** `floodroutes CNAME gitano` in the nbolt.com zone.
+- **Capacity:** measured ~37 random city trips/s. GraphHopper is the limit.
 
 ## Setup (quad)
 
@@ -188,7 +191,7 @@ Queries take about 1 ms, or ~150 ms for "A & B" intersections. Typed addresses a
 - `GET /geocode?q=`, `GET /reverse?lat=&lon=`: address search (see *Address search*).
 - `GET /health`
 
-Tests: `python -m pytest tests/ -q` (14 tests; they need GraphHopper running).
+Tests: `python -m pytest tests/ -q` (15 tests; they need GraphHopper running).
 - **Routing:** response shape; the flood route never has more high-risk exposure than the direct one; live areas are hard exclusions that leave the direct route alone; the fixture file works; out-of-area points get a 422.
 - **Layers:** `/risk.geojson`, `/hfd.geojson` (only published-report fields, valid severities, all inside Houston), `/risk_surface.png` and `.json` (a real PNG with sane bounds), `/bayous.geojson`, and the map page (banner text present, scripts only from cdnjs).
 - **Consistency:** every firefighter report a risk area cites exists in `/hfd.geojson`; `/health` reports both services up.
