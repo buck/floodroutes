@@ -148,6 +148,39 @@ As of 2026-09-25; see the docs for detail.
   - API latency (both routes plus overlay, keep-alive client) median ~22 ms, p99 ~82 ms, after moving flood risk into an encoded value (was ~300 / ~850 ms).
 - **Top-10 hotspots:** 6 got a test trip through them and 4 of those are avoided. The two not avoided are by design (no reasonable alternative). The other 4 hotspots sit where short test trips never pass (freeway frontage, cul-de-sacs). See `docs/validation.md`.
 
+## How much of Houston is at risk
+
+Computed by `risk/coverage_stats.py` (2026-09-25). City limits (1,588 km²) and roads (24,285 km drivable) come from the OSM extract.
+
+| Tier | Area | Share of city area | Share of road length |
+|---|---:|---:|---:|
+| High | 11.1 km² | 0.70% | 0.89% |
+| Medium | 27.0 km² | 1.70% | 2.12% |
+| Low | 68.1 km² | 4.29% | 5.49% |
+| **Any tier** | 106.3 km² | **6.69%** | **8.51%** |
+
+| Road type | km | High | Medium | Low | Any tier |
+|---|---:|---:|---:|---:|---:|
+| Freeways | 1,542 | 0.15% | 0.58% | 1.72% | 2.5% |
+| Major roads | 5,004 | 0.89% | 2.06% | 5.97% | 8.9% |
+| Local streets | 7,475 | 1.70% | 4.00% | 9.56% | 15.3% |
+| Service roads, driveways and lots | 10,265 | 0.42% | 1.02% | 2.86% | 4.3% |
+
+**Reading these numbers:**
+- The tiers mean "floods *repeatedly* and gets *reported* repeatedly". A hex needs a score ≥ 10, in practice reports from more than one storm, so routes don't avoid the whole city.
+- The looser measure, "has ever had a flood or drainage report", is much larger: 34,800 hexes covering 587 km², roughly a third of the city (not clipped to city limits).
+- History concentrates on neighbourhood streets, where residents call from. Freeways barely register because freeway flooding isn't reported through 311 (TranStar covers it).
+- Bayou-side roads with few front doors (e.g. North/South Braeswood west of Hillcroft) are under-reported for the same reason.
+
+**The tiers are local.** Rough rectangles, not official neighbourhood boundaries:
+
+| Area | High | Medium | Low | Any tier |
+|---|---:|---:|---:|---:|
+| I-10 / Washington wedge (Woodcrest / Camp Logan) | 8.5% | 9.1% | 12.6% | 30.2% |
+| Meyerland (Brays Bayou, just outside the Loop) | 3.5% | 7.2% | 9.7% | 20.4% |
+| Memorial City | 0.7% | 2.0% | 3.0% | 5.7% |
+| Southwest inside the Loop (Braes Heights, West U, Southside Place) | 0.4% | 1.1% | 4.1% | 5.6% |
+
 ## Known limitations and next steps
 
 - **Latency (fixed 2026-09-25):**
