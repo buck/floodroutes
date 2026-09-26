@@ -43,7 +43,8 @@ Read when the API starts. After any change: **D** (and **Q** for quad).
 
 Other live-report settings:
 - **Report database:** `LIVE_DB` environment variable. On gitano, `/var/lib/floodroutes/live.sqlite` (set in `deploy/gitano/floodroutes.nix`, change with **NG**); on quad, `data/live.sqlite`. Stored per report: road point, kind, time, GPS accuracy, and a hashed device token. Nothing else about the reporter.
-- **Admin:** `python -m api.live_admin list | clear-all | clear-near LAT LON [RADIUS_M]`. On gitano, run it as the `floodroutes` user in `/srv/floodroutes` with `LIVE_DB=/var/lib/floodroutes/live.sqlite`, using the API's Python (the `ExecStart` path in `systemctl cat floodroutes-api`).
+- **Admin, from quad:** `deploy/gitano/clear-reports.sh` clears all reports on the public site (e.g. between demo rehearsals); `… list` shows active spots; `… near LAT LON [RADIUS_M]` clears around a point (default 150 m).
+- **Locally:** `python -m api.live_admin list | clear-all | clear-near …` against `data/live.sqlite`.
 - **Direct route:** live reports affect only the flood-aware (blue) route. The grey direct route is deliberately left as a normal router would give it.
 
 ## 2. Map page and drive mode: `CFG` block at the top of the script in `web/index.html`

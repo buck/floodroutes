@@ -19,7 +19,7 @@ The flood data only lowers priority; it never removes a road.
   - reports expire after 2–3 h;
   - shown in the "Live flood reports" layer, and announced by voice when ahead.
 
-  Stored: road point, kind, time, GPS accuracy, hashed device token; nothing else. Rules in `api/live_config.yaml`; admin with `python -m api.live_admin`.
+  Stored: road point, kind, time, GPS accuracy, hashed device token; nothing else. Rules in `api/live_config.yaml`. From quad, `deploy/gitano/clear-reports.sh [list | near LAT LON]` lists or clears the public site's reports (with no argument, clears all: handy between demo rehearsals).
 - **Voice alerts** (browser speech, no network; 🔊/🔇 in the drive card, remembered):
   - "Flood-aware route. Watch for water. Turn around, don't drown." at the start;
   - medium/high flood-history areas on the road being driven, about a quarter mile ahead ("High flood-risk area ahead in 1,200 feet. Flooded in 5 storms.") and on entry;
