@@ -8,6 +8,8 @@ Right: the same scores smoothed with a Gaussian (~250 m) and drawn as a
 
 Writes docs/risk_surface.png. Scores only; no case data.
 """
+import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -20,6 +22,11 @@ sys.path.insert(0, str(ROOT / "ingest"))
 from db import connect  # noqa: E402
 
 OUT = ROOT / "docs" / "risk_surface.png"
+PBF = ROOT / "data" / "osm" / "houston.osm.pbf"
+BAYOUS = ROOT / "data" / "osm" / "bayous.geojson"
+MAJOR_BAYOUS = ["Buffalo Bayou", "White Oak Bayou", "Little White Oak Bayou", "Brays Bayou", "Sims Bayou",
+                "Greens Bayou", "Halls Bayou", "Hunting Bayou", "Keegans Bayou", "Garners Bayou",
+                "Carpenters Bayou", "Cypress Creek", "Clear Creek"]
 LON0, LON1, LAT0, LAT1 = -95.80, -95.05, 29.52, 30.12
 STEP = 0.0008            # ~80 m grid
 SIGMA_M = 250            # smoothing for the contour view
@@ -35,6 +42,44 @@ def gaussian_blur(a, sigma_px):
     kx = np.fft.fftfreq(nx)[None, :]
     g = np.exp(-2 * (np.pi * sigma_px) ** 2 * (kx ** 2 + ky ** 2))
     return np.real(np.fft.ifft2(np.fft.fft2(a) * g))
+
+
+def load_bayous():
+    """Named major bayous from the OSM extract (cached as data/osm/bayous.geojson)."""
+    if not BAYOUS.exists() or BAYOUS.stat().st_mtime < PBF.stat().st_mtime:
+        tmp = BAYOUS.with_suffix(".osm.pbf")
+        subprocess.run(["osmium", "tags-filter", "-O", "-o", str(tmp), str(PBF),
+                        "w/waterway=river,stream,canal,drain"], check=True)
+        seq = subprocess.run(["osmium", "export", "-f", "geojsonseq", str(tmp)], check=True,
+                             capture_output=True, text=True).stdout
+        tmp.unlink()
+        feats = []
+        for ln in seq.splitlines():
+            ln = ln.strip("\x1e").strip()
+            if not ln:
+                continue
+            f = json.loads(ln)
+            if f["properties"].get("name") in MAJOR_BAYOUS and f["geometry"]["type"] == "LineString":
+                feats.append({"type": "Feature", "properties": {"name": f["properties"]["name"]},
+                              "geometry": f["geometry"]})
+        BAYOUS.write_text(json.dumps({"type": "FeatureCollection", "features": feats}))
+    by = {}
+    for f in json.loads(BAYOUS.read_text())["features"]:
+        by.setdefault(f["properties"]["name"], []).append(f["geometry"]["coordinates"])
+    return by
+
+
+def draw_bayous(ax, bayous, labels=True):
+    for name, parts in bayous.items():
+        pts = []
+        for coords in parts:
+            xs, ys = zip(*coords)
+            ax.plot(xs, ys, color="#0369a1", lw=1.1, alpha=0.9, solid_capstyle="round")
+            pts += [c for c in coords if LON0 < c[0] < LON1 and LAT0 < c[1] < LAT1]
+        if labels and pts:
+            lo, la = sorted(pts)[len(pts) // 3]  # a point a third of the way along, west to east
+            ax.annotate(name.replace(" Bayou", ""), (lo, la), fontsize=7, color="#0369a1", style="italic",
+                        xytext=(3, -9), textcoords="offset points")
 
 
 def main():
@@ -77,7 +122,8 @@ def main():
     cs = ax2.contour(lons, lats, smooth, levels=[th["low"], th["medium"], th["high"]],
                      colors=["#b45309", "#c2410c", "#7f1d1d"], linewidths=[0.9, 1.2, 1.6])
     ax2.clabel(cs, fmt={th["low"]: "low", th["medium"]: "med", th["high"]: "high"}, fontsize=7)
-    ax2.set_title(f"Smoothed risk surface (~{SIGMA_M} m), contours; heavy lines = tier cut-offs")
+    draw_bayous(ax2, load_bayous())
+    ax2.set_title(f"Smoothed risk surface (~{SIGMA_M} m) with major bayous; heavy lines = tier cut-offs")
     fig.colorbar(cf, ax=ax2, shrink=0.8, label="smoothed score")
 
     for ax in (ax1, ax2):
