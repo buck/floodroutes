@@ -179,7 +179,7 @@ def scene_ignore(s):
     s.cap("Each time it leaves the <span style='color:#60a5fa'>blue</span> advice, the app re-plans from the car's position, live.", 6)
     s.cap("", 0)
     s.p.wait_for_timeout(16000)
-    s.cap("The re-plan count is in the top-right card. Warnings describe the road actually being driven.", 5)
+    s.cap("The blue <b>↻ re-plans</b> counter in the top-right card keeps count. Warnings describe the road actually being driven.", 5)
     s.click("#stopDrive", 0.8)
 
 
@@ -196,7 +196,7 @@ def scene_firefighters(s):
     s.p.wait_for_timeout(3500)
     s.cap("Station 72: <i>“Bay Area Blvd … floods all the way to the front of fire station 72.”</i>", 5)
     s.point(640, 650, 0.2)
-    s.cap("The fastest route runs straight down Bay Area Blvd. The flood-aware route avoids all <b>1.5 km</b> of it, for one minute.", 6)
+    s.cap("The fastest route runs straight down Bay Area Blvd. The flood-aware route avoids almost a <b>mile</b> of it, for one minute.", 6)
 
 
 def scene_live_report(s):

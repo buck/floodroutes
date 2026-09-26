@@ -69,6 +69,7 @@ After any change: **D** (plus a page reload).
 | `roughFixM` | 60 | Show "±N m" after My location when accuracy is worse than this. |
 | `suggestDelayMs` / `suggestLimit` | 150 / 6 | Pause after typing before suggestions; number shown. |
 | `reportsRefreshS` | 60 | Refresh the live-reports layer this often. |
+| `units` | imperial | Distances in miles and feet (feet below 0.1 mi). `metric` shows km/m; a `?units=metric` link does the same for one visitor. The API always works in metres. |
 
 Fixed behaviour in the same file:
 - the phone layout applies at ≤ 700 px wide;

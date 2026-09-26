@@ -73,6 +73,8 @@
   body.driving #panel, body.driving #tripCard { display: none; }
   #drive .eta { font-size: 20px; font-weight: 700; white-space: nowrap; }
   #drive .next { margin-top: 4px; }
+  .replans { display: inline-block; margin-left: 4px; padding: 2px 9px; border-radius: 999px; background: var(--accent);
+    color: #fff; font-weight: 700; font-size: 14px; vertical-align: 3px; white-space: nowrap; }
   #recenter { position: fixed; z-index: 950; right: 12px; bottom: 24px; display: none; padding: 8px 12px; }
   body.driving.panned #recenter { display: block; }
   .me { width: 18px; height: 18px; border-radius: 50%; background: #2563eb; border: 3px solid #fff;
@@ -149,7 +151,7 @@
 </div>
 
 <div id="drive" class="card">
-  <div class="row"><span class="eta" id="driveEta">–</span>
+  <div class="row"><span><span class="eta" id="driveEta">–</span> <span id="replanBadge" class="replans" hidden></span></span>
     <span><button id="voiceBtn" title="Voice alerts on/off" aria-label="Voice alerts">🔊</button>
       <button id="simSpeed" title="Simulation speed" hidden>8×</button> <button id="stopDrive">Stop</button></span></div>
   <div class="muted" id="driveTo"></div>
@@ -185,11 +187,26 @@ const CFG = {
   suggestDelayMs: 150,        // pause after typing before asking for suggestions
   suggestLimit: 6,            // suggestions shown
   reportsRefreshS: 60,        // refresh the live-reports layer this often
+  units: 'imperial',          // 'imperial' (miles/feet, for US drivers) or 'metric'; ?units=metric overrides
 };
+if (new URLSearchParams(location.search).get('units') === 'metric') CFG.units = 'metric';
 const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-const km = m => (m / 1000).toFixed(1) + ' km';
+// Distances: the API works in metres; the page shows miles/feet (or km/m with units=metric).
+const FT_PER_M = 3.28084, M_PER_MI = 1609.344;
+function dist(m) {
+  m = Math.max(0, m);
+  if (CFG.units === 'metric') return m < 1000 ? `${Math.round(m / 10) * 10} m` : `${(m / 1000).toFixed(1)} km`;
+  const mi = m / M_PER_MI;
+  if (mi < 0.1) return m * FT_PER_M < 25 ? '0 ft' : `${Math.max(50, Math.round(m * FT_PER_M / 50) * 50).toLocaleString('en-US')} ft`;
+  return mi < 10 ? `${mi.toFixed(1)} mi` : `${Math.round(mi)} mi`;
+}
+// short lengths inside risk areas: always feet (or metres)
+const short = m => CFG.units === 'metric' ? `${Math.round(m)} m`
+  : `${(Math.round(m * FT_PER_M / 10) * 10).toLocaleString('en-US')} ft`;
+const shortNum = m => CFG.units === 'metric' ? `${Math.round(m)}` : (Math.round(m * FT_PER_M / 10) * 10).toLocaleString('en-US');
+const km = dist;  // older name
 const mins = s => Math.max(1, Math.round(s / 60)) + ' min';
 const hint = t => { $('hint').textContent = t; };
 const mobile = () => matchMedia('(max-width: 700px)').matches;
@@ -364,7 +381,7 @@ function setEnd(which, latlng, label, { lookup = false, go = true, acc = null } 
   if (lookup || !label) {
     fetch(`reverse?lat=${latlng.lat.toFixed(6)}&lon=${latlng.lng.toFixed(6)}`).then(r => r.ok ? r.json() : null).then(d => {
       if (!d || ends[which]?.marker !== marker) return;
-      const rough = acc && acc > CFG.roughFixM ? ` ±${Math.round(acc)} m` : '';
+      const rough = acc && acc > CFG.roughFixM ? ` ±${dist(acc)}` : '';
       ends[which].label = mine ? `My location (${d.label}${rough})` : d.label;
       input(which).value = ends[which].label;
       summaryHeader(); syncUrl();
@@ -518,10 +535,10 @@ async function route(fit = true, { quiet = false, origin = null } = {}) {
   const ex = d.risk_exposure_m, det = d.detour, hs = d.hotspots_avoided;
   const hsList = hs.length ? '<ul>' + hs.slice(0, 12).map(h =>
       `<li><span class="tier ${h.tier}">${h.tier}</span> ${h.storm_events} storm events, ${h.reports} reports ` +
-      `<span class="muted">(${esc(h.first_year)}–${esc(h.last_year)}, ${h.meters_inside} m of route)</span></li>`).join('') +
+      `<span class="muted">(${esc(h.first_year)}–${esc(h.last_year)}, ${short(h.meters_inside)} of route)</span></li>`).join('') +
       (hs.length > 12 ? `<li class="muted">…and ${hs.length - 12} more</li>` : '') + '</ul>'
     : '<div class="muted">No flood-history areas on the direct route.</div>';
-  const expo = k => `${ex[k].high} / ${ex[k].medium} / ${ex[k].low} m`;
+  const expo = k => `${shortNum(ex[k].high)} / ${shortNum(ex[k].medium)} / ${shortNum(ex[k].low)} ${CFG.units === 'metric' ? 'm' : 'ft'}`;
   $('result').innerHTML = `
     <hr>
     <div class="endpoints"></div>
@@ -646,6 +663,7 @@ function startDrive(mode) {
   const simulate = !!mode;
   driving = true; sim = mode; followMe = true; lastRerouteAt = Date.now(); reroutes = 0;
   announced.clear();
+  $('replanBadge').hidden = true;
   if (canSpeak) speechSynthesis.cancel();
   say("Flood-aware route. Watch for water. Turn around, don't drown.");
   document.body.classList.add('driving'); document.body.classList.remove('panned');
@@ -772,6 +790,8 @@ async function onPosition(p) {
     }
     if (d && off) {
       reroutes++;
+      $('replanBadge').textContent = `↻ ${reroutes} re-plan${reroutes === 1 ? '' : 's'}`;
+      $('replanBadge').hidden = false;
       say('Route updated.');
       $('driveNote').textContent = sim === 'ignore'
         ? `Driver ignored the advice: re-planned ${reroutes} time${reroutes === 1 ? '' : 's'} from the car's position.`
