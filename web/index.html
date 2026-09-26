@@ -87,6 +87,7 @@
     #peek { display: block; font-weight: 600; cursor: pointer; }
     #drive { left: 8px; right: 8px; width: auto; top: calc(var(--banner-h) + 6px); }
     .leaflet-control-zoom { display: none; }
+    .sim-actions { display: none !important; }   /* simulation is a presentation tool; ?sim= still works */
   }
 </style>
 </head>
@@ -134,7 +135,8 @@
 
 <div id="drive" class="card">
   <div class="row"><span class="eta" id="driveEta">–</span>
-    <span><button id="simSpeed" title="Simulation speed" hidden>8×</button> <button id="stopDrive">Stop</button></span></div>
+    <span><button id="voiceBtn" title="Voice alerts on/off" aria-label="Voice alerts">🔊</button>
+      <button id="simSpeed" title="Simulation speed" hidden>8×</button> <button id="stopDrive">Stop</button></span></div>
   <div class="muted" id="driveTo"></div>
   <div class="next" id="driveNext"></div>
   <div class="muted" id="driveNote" style="font-size:12px"></div>
@@ -421,7 +423,7 @@ async function route(fit = true, { quiet = false } = {}) {
       <span class="big">+${Math.max(det.added_s, 0) >= 60 ? mins(det.added_s) : Math.max(det.added_s, 0) + ' s'}</span></div>
     <div class="row muted"><span></span><span>+${km(Math.max(det.added_m, 0))} (${det.added_distance_pct}% distance, ${det.added_time_pct}% time)</span></div>
     <div class="actions"><button class="primary" id="driveBtn">▶ Drive</button></div>
-    <div class="actions"><button id="simBtn" title="A simulated car drives the blue flood-aware route">Simulate: follow advice</button>
+    <div class="actions sim-actions"><button id="simBtn" title="A simulated car drives the blue flood-aware route">Simulate: follow advice</button>
       <button id="simIgnoreBtn" title="A simulated car drives the grey direct route; watch the flood-aware route re-plan">Simulate: ignore advice</button></div>
     <div class="row muted"><span>Risk exposure (high/med/low)</span><span></span></div>
     <div class="row"><span class="muted">direct</span><span>${expo('baseline')}</span></div>
@@ -430,6 +432,10 @@ async function route(fit = true, { quiet = false } = {}) {
   $('driveBtn').onclick = () => startDrive(false);
   $('simBtn').onclick = () => startDrive('follow');
   $('simIgnoreBtn').onclick = () => startDrive('ignore');
+  // when both routes are the same there is no advice to ignore
+  const same = det.added_m === 0 && hs.length === 0;
+  $('simIgnoreBtn').disabled = same;
+  if (same) $('simIgnoreBtn').title = 'Both routes are the same on this trip: nothing to ignore.';
   summaryHeader(); updatePeek(); syncUrl();
   return d;
 }
@@ -446,6 +452,44 @@ async function route(fit = true, { quiet = false } = {}) {
   const simArg = sp.get('sim');
   if (a && b) route(!hasView).then(d => { if (d && simArg) startDrive(simArg === 'ignore' ? 'ignore' : 'follow'); });
 })();
+
+// ================= voice alerts =================
+// Spoken with the browser's built-in speech (no network). Medium/high areas only; each area
+// is announced once per drive (approaching, then entering), even across re-routes.
+let voiceOn = true;
+try { voiceOn = localStorage.getItem('floodroutes.voice') !== 'off'; } catch (e) {}
+const canSpeak = 'speechSynthesis' in window;
+const announced = new Set();
+function showVoice() { $('voiceBtn').textContent = voiceOn ? '🔊' : '🔇'; $('voiceBtn').hidden = !canSpeak; }
+function say(text) {
+  if (!voiceOn || !canSpeak) return;
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = 'en-US'; u.rate = 1.0;
+  speechSynthesis.speak(u);
+}
+$('voiceBtn').onclick = () => {
+  voiceOn = !voiceOn; showVoice();
+  try { localStorage.setItem('floodroutes.voice', voiceOn ? 'on' : 'off'); } catch (e) {}
+  if (!voiceOn && canSpeak) speechSynthesis.cancel();
+};
+showVoice();
+function spokenDistance(m) {
+  const ft = m * 3.28084;
+  if (ft < 950) return `${Math.max(100, Math.round(ft / 100) * 100)} feet`;
+  const mi = m / 1609.34;
+  return mi < 0.35 ? 'a quarter mile' : mi < 0.65 ? 'half a mile' : `${mi.toFixed(1)} miles`;
+}
+function voiceForArea(h, dist) {
+  if (!h || (h.tier !== 'high' && h.tier !== 'medium')) return;
+  const storms = `Flooded in ${h.storm_events} storm${h.storm_events === 1 ? '' : 's'}.`;
+  if (dist > 0 && dist <= 400 && !announced.has(h.id + ':ahead')) {
+    announced.add(h.id + ':ahead');
+    say(`${h.tier === 'high' ? 'High' : 'Medium'} flood-risk area ahead in ${spokenDistance(dist)}. ${storms}`);
+  } else if (dist <= 0 && !announced.has(h.id + ':in')) {
+    announced.add(h.id + ':in'); announced.add(h.id + ':ahead');
+    say(`Entering a ${h.tier} flood-risk area.`);
+  }
+}
 
 // ================= drive mode =================
 let trail = null;  // where the car has actually been during a drive or simulation
@@ -489,6 +533,9 @@ function startDrive(mode) {
   if (!lastRoute || !ends.to) return;
   const simulate = !!mode;
   driving = true; sim = mode; followMe = true; lastRerouteAt = Date.now(); reroutes = 0;
+  announced.clear();
+  if (canSpeak) speechSynthesis.cancel();
+  say("Flood-aware route. Watch for water. Turn around, don't drown.");
   document.body.classList.add('driving'); document.body.classList.remove('panned');
   $('simSpeed').hidden = !simulate; $('simSpeed').textContent = simSpeed + '×';
   $('driveNote').textContent = mode === 'ignore'
@@ -522,6 +569,7 @@ function startDrive(mode) {
 function stopDrive() {
   if (!driving) return;
   driving = false;
+  if (canSpeak) setTimeout(() => { if (!driving) speechSynthesis.cancel(); }, 2500);  // let "arrived" finish
   if (watchId !== null) navigator.geolocation.clearWatch(watchId);
   watchId = null;
   clearTimeout(simTimer);
@@ -558,7 +606,7 @@ async function onPosition(p) {
   $('driveEta').textContent = (sim === 'ignore' ? 'Advice: ' : '') + `${mins(tLeft)} · ${km(left)}`;
 
   if (metres(here, L.latLng(ends.to.lat, ends.to.lng)) < 40 || left < 30) {
-    stopDrive(); hint('Arrived.'); return;
+    say('You have arrived.'); stopDrive(); hint('Arrived.'); return;
   }
   // warn about the road actually being driven: the direct route when ignoring advice
   const driven = sim === 'ignore' ? 'baseline' : 'flood_aware';
@@ -567,6 +615,10 @@ async function onPosition(p) {
   const ahead = (lastRoute[driven].hotspots_crossed || [])
     .filter(h => h.along_m != null && h.along_m + h.meters_inside > prd.along)
     .sort((a, b) => a.along_m - b.along_m)[0];
+  const nextMajor = (lastRoute[driven].hotspots_crossed || [])
+    .filter(h => (h.tier === 'high' || h.tier === 'medium') && h.along_m != null && h.along_m + h.meters_inside > prd.along)
+    .sort((a, b) => a.along_m - b.along_m)[0];
+  if (nextMajor) voiceForArea(nextMajor, nextMajor.along_m - prd.along);
   $('driveNext').innerHTML = ahead
     ? (ahead.along_m <= prd.along
         ? `<span class="tier ${ahead.tier}">${ahead.tier}</span> In a flood-history area now (${ahead.storm_events} storm${ahead.storm_events === 1 ? '' : 's'})`
@@ -586,6 +638,7 @@ async function onPosition(p) {
     const d = await route(false, { quiet: true });
     if (d && off) {
       reroutes++;
+      say('Route updated.');
       $('driveNote').textContent = sim === 'ignore'
         ? `Driver ignored the advice: re-planned ${reroutes} time${reroutes === 1 ? '' : 's'} from the car's position.`
         : 'Re-routed from your position.';

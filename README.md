@@ -13,7 +13,13 @@ The flood data only lowers priority; it never removes a road.
 - **Layers:** routing risk areas, smoothed risk surface, bayous, firefighter reports.
 - **Phones:** the trip box sits at the top and results in a bottom sheet. With location permission already granted, the start defaults to My location.
 - **▶ Drive:** follows the GPS position and keeps the screen awake. It re-routes when off the route by more than ~50 m, or every 20 s, and shows remaining time and distance plus the next flood-history area ahead.
-- **Simulate drive:** two modes, each at 4/8/16×, with a dotted trail of where the car has been.
+- **Voice alerts** (browser speech, no network; 🔊/🔇 in the drive card, remembered):
+  - "Flood-aware route. Watch for water. Turn around, don't drown." at the start;
+  - medium/high flood-history areas on the road being driven, about a quarter mile ahead ("High flood-risk area ahead in 1,200 feet. Flooded in 5 storms.") and on entry;
+  - "Route updated." and "You have arrived."
+
+  Low-tier areas are silent. Each area is announced once per drive.
+- **Simulate drive** (desktop only; hidden on phones, where `sim=` links still work): two modes, each at 4/8/16×, with a dotted trail of where the car has been. "Ignore advice" is disabled when both routes are identical.
   - **follow advice:** the car drives the blue flood-aware route.
   - **ignore advice:** the car drives the grey direct route. Each time it leaves the blue route, the app re-plans from the car's position (at most every 3 s) and counts the re-plans. Warnings describe the road actually being driven.
 - **Deep links:** `/?from=lat,lon&to=lat,lon[&fromLabel=&toLabel=]`, `view=lat,lon,zoom`, `surface=1`, `sim=1` (simulated drive, following advice) or `sim=ignore` (simulated driver ignoring advice).
