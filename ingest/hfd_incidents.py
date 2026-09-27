@@ -23,7 +23,8 @@ Each incident is linked to core.storm_day / core.storm_event by date, like the 3
 Source quirks: incidentId is the placeholder 0 on ~720 rows (so rows are keyed on OBJECTID), and
 ~300 rows from 2024-25 have no date at all, only year/month/hour (date_precision = 'month'; most
 are July 2024, i.e. Hurricane Beryl).
-This script only loads the table; risk/build_risk.py does not read it (yet).
+NOT USED for now: nothing reads this table (risk/build_risk.py, the map and the API ignore it) until
+Rice / HFD agree to its use. See README "HFD water-rescue incidents (loaded, not used)".
 
 Usage: .venv/bin/python ingest/hfd_incidents.py
 """

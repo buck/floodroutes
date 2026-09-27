@@ -243,6 +243,14 @@ As of 2026-09-25; see the docs for detail.
 - **Map:** the "Firefighter reports (2018 HFD survey)" layer shows each location with its quote. Risk areas that include one say so in their tooltip.
 - **Independent check:** `docs/hfd_stations.md` compares the stations officers call cut off with the 311-only score around them. About half are in the top quarter of stations; the rest are where 311 misses station-access flooding.
 
+### HFD water-rescue incidents (loaded, not used)
+
+- **Source:** a Rice University GIS account (`dlr10_ricegis`) publishes 2.46M geocoded HFD incidents, 2019 to mid-2025, as the public ArcGIS layer `HFD_FinalSituation_XYTableToPoint`. It appears to belong to a Rice study of HFD false alarms and station workload. It carries no description or license, and it is a research working copy of HFD records, not an official HFD release.
+- **Loaded:** `ingest/hfd_incidents.py` pulls the 1,570 flood-related incidents into `core.hfd_flood_incident`: water-rescue dispatches (CAD `FFWR*`) plus swift-water rescue, water evacuation and flood assessment. They are classed as rescue (589), reported but not found (392), assessment (160) and other (429), and linked to `core.storm_event` by day. A raw snapshot is kept in `data/external/hfd_flood_incidents_rice.json`.
+- **Not used, for now.** Nothing reads the table: it is not in `risk/build_risk.py`, the map, or the API. Before using it, ask Rice and HFD for permission and for provenance, and check whether rescue points mark the water or the caller.
+- **Why it is worth asking about:** 80% of the rescue and reported-but-not-found incidents fall outside every current risk polygon, and only about 260 incidents land on days the 311 data counts as storm days (Jan 9, 2022 had 42 water-rescue dispatches and is not a detected storm).
+- **The survey points are still unpublished:** the 1,383 surveyed flood locations behind the 2018 HFD survey are not in any Rice ArcGIS layer (checked 2026-09-26).
+
 ## How much of Houston is at risk
 
 Computed by `risk/coverage_stats.py` (2026-09-25). City limits (1,588 km²) and roads (24,285 km drivable) come from the OSM extract.
