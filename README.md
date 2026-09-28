@@ -5,7 +5,7 @@
 *Houston Hackathon 2026.*
 
 - 🌐 **Try it now (any phone or desktop browser, no install):** https://floodroutes.nbolt.com/
-- 🎬 **Demo video:** *(link coming)*
+- 🎬 **Demo video (4 min):** https://youtu.be/0IZNP8qnGaY
 - 📄 **About & limits:** https://floodroutes.nbolt.com/about
 
 ![Normal route (grey) vs. flood-aware route (blue) from UH-Clear Lake to Baybrook Mall: one extra minute avoids a street where firefighters report their trucks can't get out](docs/images/routes-clear-lake.png)

@@ -19,7 +19,7 @@
 
 ## Video demo link
 
-✏️ YouTube URL
+https://youtu.be/0IZNP8qnGaY
 
 ## Image gallery (upload in this order)
 
