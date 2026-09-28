@@ -1,5 +1,28 @@
 # floodroutes: Houston flood-aware routing
 
+**Driving directions that avoid Houston streets with a history of flooding, and warn you by voice before you reach one.** Built from 15 years of City of Houston 311 reports and firefighter accounts of where their trucks meet water.
+
+*Houston Hackathon 2026.*
+
+- 🌐 **Try it now (any phone or desktop browser, no install):** https://floodroutes.nbolt.com/
+- 🎬 **Demo video:** *(link coming)*
+- 📄 **About & limits:** https://floodroutes.nbolt.com/about
+
+![Normal route (grey) vs. flood-aware route (blue) from UH-Clear Lake to Baybrook Mall: one extra minute avoids a street where firefighters report their trucks can't get out](docs/images/routes-clear-lake.png)
+
+**How it works**
+1. **History:** 5.6 million Houston 311 cases (2011 to today, plus the Harvey extract) are downloaded and classified; 163,000 of them describe street flooding or drainage failure.
+2. **Where it recurs:** reports are placed on a hexagon grid and scored by how many separate storms flooded each spot, plus 26 locations firefighters named in a 2018 Rice/Kinder survey of the Houston Fire Department.
+3. **Routing:** an open-source routing engine (GraphHopper, on OpenStreetMap roads) gives risky streets a lower priority, so it picks the nearby parallel street. On a typical trip this costs about **30 seconds**, and about 80% of routes that would cross a high-risk area avoid them entirely.
+4. **Driving:** ▶ Drive follows your GPS, re-routes, and speaks warnings ("High flood-risk area ahead in 1,200 feet. Flooded in 5 storms.").
+5. **Live reports:** drivers tap 🌊 Water on road / ⛔ Impassable / ✓ Water gone; two phones reporting "Impassable" close the road for everyone else's route until the reports expire.
+
+Everything is open: public data, open-source tools, one server, Apache-2.0 license ([LICENSE](LICENSE)). The technical details follow.
+
+> *Avoids streets with a history of flooding. Absence of reports does not mean a street is dry. Turn around, don't drown.*
+
+---
+
 A routing server for Houston that steers drivers away from streets with a history of flooding and drainage problems. The history comes from the City of Houston 311 archive (2011–present plus the Harvey extract).
 
 For each trip it returns two routes side by side:
