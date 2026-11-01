@@ -43,7 +43,18 @@ def scrape_links() -> list[str]:
     return list(dict.fromkeys(urls))  # dedupe, keep order
 
 
-def head(url: str) -> tuple[int, str]:
+def is_header_only(url: str) -> bool:
+    """True if the extract is a real, empty one: banner + column header, no data rows.
+    Happens to MTD right after the city's job crosses midnight UTC on the last day of
+    a month (it then extracts the new, still-empty month)."""
+    body = curl(f"{url}?nocache=true")
+    lines = [ln for ln in body.splitlines() if ln.strip()]
+    hdr = [i for i, ln in enumerate(lines) if ln.startswith("365 Case Number|")]
+    return "Extract date-time" in body and len(hdr) == 1 and hdr[0] == len(lines) - 1
+
+
+def head(url: str) -> tuple[int, str] | None:
+    """(size, last_modified), or None if the extract is legitimately empty."""
     # Under load the server sometimes answers HEAD with a tiny placeholder; retry until sane.
     for attempt in range(6):
         hdrs = curl("-I", url)
@@ -51,6 +62,8 @@ def head(url: str) -> tuple[int, str]:
         m_lm = re.search(r"(?im)^last-modified:\s*(.+?)\s*$", hdrs)
         if m_size and m_lm and int(m_size.group(1)) > 1_000_000:
             return int(m_size.group(1)), m_lm.group(1)
+        if m_size and int(m_size.group(1)) < 10_000 and is_header_only(url):
+            return None
         time.sleep(10 * (attempt + 1))
     raise RuntimeError(f"no plausible HEAD response for {url}")
 
@@ -96,8 +109,12 @@ def main() -> int:
     stamp = dt.datetime.now().strftime("%Y%m%dT%H%M")
     failures = 0
     for url in urls:
-        size, lm = head(url)
         stem = Path(url).stem
+        h = head(url)
+        if h is None:
+            print(f"skip  {stem} (extract is header-only, no rows yet)", flush=True)
+            continue
+        size, lm = h
         have = [m for m in manifest if m["url"] == url and m["last_modified"] == lm
                 and int(m["bytes"]) == size and (RAW / m["file"]).exists()]
         if have:
