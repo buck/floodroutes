@@ -24,7 +24,7 @@
         ];
         shellHook = ''
           export PGHOST=127.0.0.1 PGPORT=5442 PGDATABASE=houston311 PGUSER=postgres
-          [ -d .venv ] || uv venv -q -p ${pkgs.python312}/bin/python3 .venv
+          [ -d .venv ] || uv venv -q --managed-python -p 3.12 .venv  # not a nix-store python: GC would break the venv
           . .venv/bin/activate
           export PGPASSWORD=$(sed -n "s/^POSTGRES_PASSWORD=//p" .env 2>/dev/null)
         '';
