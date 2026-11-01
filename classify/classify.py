@@ -3,10 +3,12 @@
 
 Rebuilds core.storm_day, core.storm_event and core.flood_signal from scratch in
 one transaction, so it is idempotent and safe to rerun after editing
-classify/rules.yaml. Writes docs/classification.md (aggregates only) and, with
---sample, docs/classification_sample.csv (redacted text; gitignored).
+classify/rules.yaml. With --report, rewrites docs/classification.md (aggregates
+only; tracked, so the nightly refresh leaves it alone; regenerate it after a
+rules change). With --sample, writes docs/classification_sample.csv (redacted
+text; gitignored).
 
-Usage: classify.py [--sample]
+Usage: classify.py [--report] [--sample]
 """
 import argparse
 import bisect
@@ -286,6 +288,7 @@ def report(conn, cfg, sha, threshold, pct, counts, ev_rows, known, stats):
 
 def main() -> int:
     ap = argparse.ArgumentParser()
+    ap.add_argument("--report", action="store_true", help="also rewrite docs/classification.md")
     ap.add_argument("--sample", action="store_true", help="also write the redacted review sample")
     args = ap.parse_args()
     raw = RULES.read_bytes()
@@ -315,7 +318,9 @@ def main() -> int:
                 conn.execute("""UPDATE core.hfd_flood_incident h SET storm_event_id = NULL
                                   WHERE NOT EXISTS (SELECT 1 FROM core.storm_day d WHERE d.day = h.local_day)""")
         conn.execute("ANALYZE core.flood_signal")
-        report(conn, cfg, sha, threshold, pct, counts, ev_rows, known, stats)
+        if args.report:
+            report(conn, cfg, sha, threshold, pct, counts, ev_rows, known, stats)
+            print(f"report -> {DOC}", flush=True)
         print(f"{len(signals):,} signals, {len(ev_rows)} storm events, threshold {threshold}/day, "
               f"{time.time() - t0:.0f}s", flush=True)
         if args.sample:

@@ -7,7 +7,7 @@ Every tunable in floodroutes, with its current value, where it lives, what it do
 | Code | Meaning |
 |---|---|
 | **R** | `graphhopper/rebuild.sh` on quad. Rebuilds the risk surface, custom model, surface overlay and routing graph, then deploys to gitano. ~2 min; public routing pauses a few seconds. |
-| **C** | `python classify/classify.py`, then **R**. Also runs nightly, but the graph only updates on **R**. |
+| **C** | `python classify/classify.py --report`, then **R**. Also runs nightly (without `--report`, so `docs/classification.md` changes only when you regenerate it), but the graph only updates on **R**. |
 | **D** | `deploy/gitano/deploy.sh` on quad. Copies code, web pages and built files to gitano and restarts its services. |
 | **Q** | `sudo systemctl restart floodroutes-api` on quad (the local copy). |
 | **NG** | On gitano: copy `deploy/gitano/floodroutes.nix` to `/etc/nixos/floodroutes.nix`, run `nixos-rebuild switch`, commit in `/etc/nixos`. |

@@ -139,7 +139,7 @@ Each makes detours longer and more frequent. How much delay drivers will accept 
 4. **First build from nothing:**
    ```
    python ingest/download.py && python ingest/load.py
-   python classify/classify.py --sample
+   python classify/classify.py --report --sample
    python geocode/geocode.py --priority 0          # flood signals; the rest: --priority 1 (hours, resumable)
    curl -LO https://download.geofabrik.de/north-america/us/texas-latest.osm.pbf   # into data/osm/
    osmium extract -b -96.2,29.2,-94.7,30.4 --strategy=complete_ways -o data/osm/houston.osm.pbf data/osm/texas-latest.osm.pbf
@@ -246,7 +246,7 @@ Resident free text (names, phone numbers, emails, account numbers) lives only in
 ## Results
 
 As of 2026-09-25; see the docs for detail.
-- **Data:** 5.59M cases → 163,507 flood signals (36.5k strong, 118k moderate, 8.9k weak).
+- **Data:** ~5.6M cases → ~164k flood signals (~37k strong, ~119k moderate, ~9k weak). Exact counts for the latest committed run are in [docs/classification.md](docs/classification.md).
 - **Storm events:** 25 detected (late Imelda reports merged). Every named flood event is caught. Beryl is correctly absent: 311 shows it as a wind storm (tree, debris and signal requests quadrupled; flooding and drainage requests stayed normal).
 - **Geocoding:** 97.7% of flood signals located (target 95%). 3,555 failures have neither a point nor an address, mostly 2011 migration records.
 - **Risk surface:** 4,095 polygons (483 high, 1,158 medium, 2,454 low) covering 107 km².
