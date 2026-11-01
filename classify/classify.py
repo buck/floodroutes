@@ -308,6 +308,12 @@ def main() -> int:
                                  created_day, event_day, event_id, confidence, rules_sha) FROM STDIN""") as cp:
                     for r in signals:
                         cp.write_row(r)
+            # HFD incidents link to storm events by day; event ids are renumbered above, so re-link.
+            if conn.execute("SELECT to_regclass('core.hfd_flood_incident')").fetchone()[0]:
+                conn.execute("""UPDATE core.hfd_flood_incident h SET storm_event_id = d.event_id
+                                  FROM core.storm_day d WHERE d.day = h.local_day""")
+                conn.execute("""UPDATE core.hfd_flood_incident h SET storm_event_id = NULL
+                                  WHERE NOT EXISTS (SELECT 1 FROM core.storm_day d WHERE d.day = h.local_day)""")
         conn.execute("ANALYZE core.flood_signal")
         report(conn, cfg, sha, threshold, pct, counts, ev_rows, known, stats)
         print(f"{len(signals):,} signals, {len(ev_rows)} storm events, threshold {threshold}/day, "

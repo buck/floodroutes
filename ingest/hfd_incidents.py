@@ -74,7 +74,7 @@ CREATE TABLE core.hfd_flood_incident (
     first_arriver_home text,
     zip                text,
     city               text,
-    storm_event_id     integer REFERENCES core.storm_event,
+    storm_event_id     integer,   -- no FK: classify.py renumbers storm events and re-links this nightly
     geom               geometry(Point, 4326),
     source             text NOT NULL,
     loaded_at          timestamptz NOT NULL DEFAULT now()
